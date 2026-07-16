@@ -30,32 +30,30 @@ import {
   SuccessAnimation,
   cn,
 } from '@/components/ui';
-import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getDayLabel, compareTime, calcDuration, currentTime } from '@/utils/timeUtils';
+import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getDayLabel, compareTime, calcDuration, currentTime, formatTime12h } from '@/utils/timeUtils';
 import { scoreLabel, scoreColor } from '@/utils/insights';
 
 export function Statistics() {
-  const [selectedDate, setSelectedDate] = useState(todayDate());
+  const { settings, updateSetting } = useSettings();
+  const [selectedDate, setSelectedDate] = useState(() => todayDate(settings.wakeUpTime));
   const [filter, setFilter] = useState<FilterType>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const { settings, updateSetting } = useSettings();
   const [wakeUpTime, setWakeUpTime] = useState(settings.wakeUpTime);
   const [bedtime, setBedtime] = useState(settings.bedtime);
 
-  // Sync local state when settings load
+  // Sync local state when settings change from another source (or on mount)
   useEffect(() => {
     setWakeUpTime(settings.wakeUpTime);
     setBedtime(settings.bedtime);
   }, [settings.wakeUpTime, settings.bedtime]);
 
-  // Persist to settings context when changed locally
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (wakeUpTime !== settings.wakeUpTime) updateSetting('wakeUpTime', wakeUpTime);
-      if (bedtime !== settings.bedtime) updateSetting('bedtime', bedtime);
-    }, 500); // debounce
-    return () => clearTimeout(timeoutId);
-  }, [wakeUpTime, bedtime, settings.wakeUpTime, settings.bedtime, updateSetting]);
+  const handleSaveSchedule = () => {
+    updateSetting('wakeUpTime', wakeUpTime);
+    updateSetting('bedtime', bedtime);
+    setShowScheduleModal(false);
+  };
 
   const {
     activities,
@@ -115,8 +113,8 @@ export function Statistics() {
   // ── Timeline with Gaps ────────────────────────────────────
 
   const timelineItems = useMemo(() => {
-    // 1. Sort activities by start time (ascending to calculate gaps)
-    const sorted = [...filteredActivities].sort((a, b) => compareTime(a.startTime, b.startTime));
+    // 1. Sort activities by start time (ascending to calculate gaps) logically relative to wakeUpTime
+    const sorted = [...filteredActivities].sort((a, b) => compareTime(a.startTime, b.startTime, wakeUpTime));
     const items: (ActivityType | Gap)[] = [];
     
     // Only generate gaps if viewing all activities without search
@@ -126,8 +124,8 @@ export function Statistics() {
 
     sorted.forEach((activity, index) => {
       // If there's a gap before this activity
-      if (shouldGenerateGaps && compareTime(currentTimePointer, activity.startTime) < 0) {
-        const dur = calcDuration(currentTimePointer, activity.startTime);
+      if (shouldGenerateGaps && compareTime(currentTimePointer, activity.startTime, wakeUpTime) < 0) {
+        const dur = calcDuration(currentTimePointer, activity.startTime, wakeUpTime);
         if (dur > settings.minUntrackedGapMinutes) {
           items.push({
             isGap: true,
@@ -141,8 +139,8 @@ export function Statistics() {
       
       items.push(activity);
       
-      // Update pointer. If activities overlap, take the latest end time.
-      if (compareTime(currentTimePointer, activity.endTime) < 0) {
+      // Update pointer. If activities overlap, take the latest end time logically.
+      if (compareTime(currentTimePointer, activity.endTime, wakeUpTime) < 0) {
         currentTimePointer = activity.endTime;
       }
     });
@@ -150,17 +148,17 @@ export function Statistics() {
     if (shouldGenerateGaps) {
       // Determine the end bound: either current time (if today) or bedtime
       const now = currentTime();
-      const isToday = selectedDate === todayDate();
+      const isToday = selectedDate === todayDate(wakeUpTime);
       
       // If today and now is before bedtime, use now as the bound. Otherwise use bedtime.
       let endBound = bedtime;
-      if (isToday && compareTime(now, bedtime) < 0) {
+      if (isToday && compareTime(now, bedtime, wakeUpTime) < 0) {
         endBound = now;
       }
       
       // If pointer hasn't reached the end bound yet, add a final gap
-      if (compareTime(currentTimePointer, endBound) < 0) {
-        const dur = calcDuration(currentTimePointer, endBound);
+      if (compareTime(currentTimePointer, endBound, wakeUpTime) < 0) {
+        const dur = calcDuration(currentTimePointer, endBound, wakeUpTime);
         if (dur > settings.minUntrackedGapMinutes) {
           items.push({
             isGap: true,
@@ -175,7 +173,7 @@ export function Statistics() {
 
     // Return descending (most recent first) for display
     return items.reverse();
-  }, [filteredActivities, wakeUpTime, bedtime, selectedDate, filter, searchQuery]);
+  }, [filteredActivities, wakeUpTime, bedtime, selectedDate, filter, searchQuery, settings.minUntrackedGapMinutes]);
 
   // ── Filter counts ─────────────────────────────────────────
 
@@ -248,11 +246,11 @@ export function Statistics() {
           id="stats-date-picker"
           type="date"
           value={selectedDate}
-          max={todayDate()}
+          max={todayDate(wakeUpTime)}
           onChange={e => {
             const val = e.target.value;
-            if (val > todayDate()) {
-              setSelectedDate(todayDate());
+            if (val > todayDate(wakeUpTime)) {
+              setSelectedDate(todayDate(wakeUpTime));
             } else {
               setSelectedDate(val);
             }
@@ -392,11 +390,11 @@ export function Statistics() {
 
           {/* Activity log section */}
           <div>
-            <div className="flex items-center flex-wrap gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-semibold text-white">Activity Log</h2>
 
               {/* Search */}
-              <div className="flex items-center gap-2 flex-1 min-w-[180px] max-w-xs">
+              <div className="flex items-center gap-2 w-full sm:flex-1 sm:max-w-xs">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input
@@ -424,29 +422,34 @@ export function Statistics() {
               />
             </div>
 
+            {/* Daily Schedule Card */}
+            <div className="mb-6">
+              <Card hover onClick={() => setShowScheduleModal(true)} className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-white/5 border border-white/10">
+                       <Clock className="w-5 h-5 text-brand-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Sleep Schedule</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Wake-up: <span className="font-medium text-slate-300">{formatTime12h(settings.wakeUpTime)}</span> &bull; Bedtime: <span className="font-medium text-slate-300">{formatTime12h(settings.bedtime)}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-slate-400 flex items-center gap-2">
+                    <span className="text-xs font-medium hidden sm:inline-block">Edit</span>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
             {/* Timeline */}
-            <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs text-slate-500">Timeline</span>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Wake-up:</span>
-                  <input
-                    type="time"
-                    value={wakeUpTime}
-                    onChange={e => setWakeUpTime(e.target.value)}
-                    className="bg-transparent text-slate-400 text-xs rounded border border-white/10 px-1 outline-none dark:[color-scheme:dark]"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Bedtime:</span>
-                  <input
-                    type="time"
-                    value={bedtime}
-                    onChange={e => setBedtime(e.target.value)}
-                    className="bg-transparent text-slate-400 text-xs rounded border border-white/10 px-1 outline-none dark:[color-scheme:dark]"
-                  />
-                </div>
-              </div>
+            <div className="mb-3 px-1">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Timeline</span>
             </div>
             <ActivityTimeline
               items={timelineItems}
@@ -485,6 +488,63 @@ export function Statistics() {
             isSaving={isSaving}
           />
         )}
+      </Modal>
+
+      {/* Schedule Edit Modal */}
+      <Modal
+        isOpen={showScheduleModal}
+        onClose={() => {
+          setShowScheduleModal(false);
+          // Revert local state if cancelled
+          setWakeUpTime(settings.wakeUpTime);
+          setBedtime(settings.bedtime);
+        }}
+        title="Edit Schedule"
+      >
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Wake-up Time
+              </label>
+              <input
+                type="time"
+                value={wakeUpTime}
+                onChange={e => setWakeUpTime(e.target.value)}
+                className="w-full bg-white/5 text-white text-sm rounded-xl px-4 py-3 border border-white/10 outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30 transition-all dark:[color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Bedtime
+              </label>
+              <input
+                type="time"
+                value={bedtime}
+                onChange={e => setBedtime(e.target.value)}
+                className="w-full bg-white/5 text-white text-sm rounded-xl px-4 py-3 border border-white/10 outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30 transition-all dark:[color-scheme:dark]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+            <button
+              onClick={() => {
+                setShowScheduleModal(false);
+                setWakeUpTime(settings.wakeUpTime);
+                setBedtime(settings.bedtime);
+              }}
+              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveSchedule}
+              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 rounded-xl transition-all shadow-glow"
+            >
+              Save Schedule
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Success Toast */}

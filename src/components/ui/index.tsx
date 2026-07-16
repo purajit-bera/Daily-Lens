@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Loader2 } from 'lucide-react';
@@ -97,13 +98,12 @@ export function Card({ children, className, hover, onClick, id, style }: CardPro
       id={id}
       onClick={onClick}
       style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
         backdropFilter: 'blur(12px)',
         borderRadius: '1rem',
         ...style,
       }}
       className={cn(
+        'bg-white/5 border border-white/10 dark:[color-scheme:dark]',
         hover && 'transition-all duration-200 hover:brightness-110 cursor-pointer',
         className
       )}
@@ -216,7 +216,7 @@ export function StatCard({ label, value, subValue, icon, valueColor, accent, cla
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-          <p className="text-2xl font-bold truncate" style={{ color: valueColor || '#fff' }}>{value}</p>
+          <p className={cn("text-2xl font-bold truncate", !valueColor && "text-white")} style={{ color: valueColor }}>{value}</p>
           {subValue && <p className="text-xs text-slate-500 mt-0.5">{subValue}</p>}
         </div>
         {icon && (
@@ -247,7 +247,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="p-4 rounded-2xl text-slate-400 mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>{icon}</div>
+      <div className="p-4 rounded-2xl text-slate-400 mb-4 bg-white/5">{icon}</div>
       <h3 className="text-lg font-semibold text-slate-200 mb-2">{title}</h3>
       {description && <p className="text-sm text-slate-400 max-w-sm mb-4">{description}</p>}
       {action}
@@ -289,21 +289,56 @@ interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  const [shouldRender, setShouldRender] = React.useState(isOpen);
+  const [isClosing, setIsClosing] = React.useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      setIsClosing(false);
+      document.body.style.overflow = 'hidden';
+    } else if (shouldRender) {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+        document.body.style.overflow = '';
+      }, 200); // match animation duration
+      return () => {
+        clearTimeout(timer);
+        document.body.style.overflow = '';
+      };
+    }
+    
+    // Cleanup if component unmounts entirely
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, shouldRender]);
+
+  if (!shouldRender) return null;
+
+  return createPortal(
+    <div className={cn(
+      "fixed inset-0 z-[100] flex items-center justify-center p-4 transition-all duration-200",
+      isClosing ? "opacity-0" : "opacity-100"
+    )}>
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+        className={cn(
+          "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200",
+          !isClosing ? "animate-fade-in" : ""
+        )}
         onClick={onClose}
       />
       
       {/* Dialog */}
       <div 
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-glass animate-scale-in"
+        className={cn(
+          "relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-glass bg-[#0a0a0f] border border-white/10 dark:[color-scheme:dark] transition-all duration-200",
+          !isClosing ? "animate-scale-in" : "scale-95"
+        )}
         style={{
-          background: '#0a0a0f',
-          border: '1px solid rgba(255,255,255,0.1)',
+          // Use css classes primarily, inline style only if necessary
         }}
       >
         <div className="flex items-center justify-between p-4 border-b border-white/10 sticky top-0 bg-[#0a0a0f]/90 backdrop-blur z-10">
@@ -321,6 +356,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

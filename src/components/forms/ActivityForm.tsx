@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { Calendar, Clock, Timer, Save, Zap } from 'lucide-react';
 import type { Activity, ActivityCategory, ActivityFormData } from '@/types';
 import { useTimeSync } from '@/hooks/useTimeSync';
+import { useSettings } from '@/context/SettingsContext';
 import { RichTextEditor } from './RichTextEditor';
 import { Button, Card, ErrorAlert, cn } from '@/components/ui';
 import { todayDate, generateId, formatTime12h, currentTime, calcStartTime, calcEndTime, formatDurationLong } from '@/utils/timeUtils';
@@ -31,6 +32,7 @@ const ACTIVE_CATEGORY_CLASSES: Record<ActivityCategory, string> = {
 };
 
 export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProps) {
+  const { settings } = useSettings();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recentActivities, setRecentActivities] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
@@ -50,7 +52,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
       category: initialData.category,
       description: initialData.description,
     } : {
-      date: todayDate(),
+      date: todayDate(settings.wakeUpTime),
       category: 'Positive',
       description: '',
     },
@@ -61,7 +63,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
     startTime: initialData.startTime,
     endTime: initialData.endTime,
     durationMinutes: initialData.durationMinutes,
-  } : undefined);
+  } : undefined, settings.wakeUpTime);
   const description = watch('description');
   const category = watch('category');
 
@@ -240,11 +242,11 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
               <input
                 id="start-time"
                 type="time"
-                max={date === todayDate() ? currentTime() : undefined}
+                max={date === todayDate(settings.wakeUpTime) ? currentTime() : undefined}
                 value={timeSync.startTime}
                 onChange={e => {
                   let val = e.target.value;
-                  if (date === todayDate() && val > currentTime()) {
+                  if (date === todayDate(settings.wakeUpTime) && val > currentTime()) {
                     val = currentTime();
                     timeSync.setAll({
                       startTime: val,
@@ -269,11 +271,11 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
               <input
                 id="end-time"
                 type="time"
-                max={date === todayDate() ? currentTime() : undefined}
+                max={date === todayDate(settings.wakeUpTime) ? currentTime() : undefined}
                 value={timeSync.endTime}
                 onChange={e => {
                   let val = e.target.value;
-                  if (date === todayDate() && val > currentTime()) {
+                  if (date === todayDate(settings.wakeUpTime) && val > currentTime()) {
                     val = currentTime();
                     timeSync.setAll({
                       endTime: val,
@@ -385,7 +387,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
       <Card className="p-4">
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
           Activity Description
-          <span className="ml-auto text-slate-600 font-normal normal-case tracking-normal text-xs">
+          <span className="hidden md:inline ml-auto text-slate-600 font-normal normal-case tracking-normal text-xs">
             Ctrl+Enter to save
           </span>
         </label>
@@ -438,7 +440,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
         {isSaving ? 'Saving to Google Sheets…' : initialData ? 'Save Changes' : 'Save Activity'}
       </Button>
 
-      <p className="text-center text-xs text-slate-600">
+      <p className="hidden md:block text-center text-xs text-slate-600">
         Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-slate-400 font-mono text-xs">Ctrl</kbd>
         {' + '}
         <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-slate-400 font-mono text-xs">Enter</kbd>

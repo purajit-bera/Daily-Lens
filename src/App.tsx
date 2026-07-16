@@ -3,7 +3,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LoadingProvider } from '@/context/LoadingContext';
-import { SettingsProvider } from '@/context/SettingsContext';
+import { SettingsProvider, useSettings } from '@/context/SettingsContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { ActivityEntry } from '@/pages/ActivityEntry';
@@ -14,12 +14,14 @@ const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 // ── Protected route wrapper ───────────────────────────────────
 
 function ProtectedRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { isInitialized: isSettingsInitialized, isLoading: isSettingsLoading } = useSettings();
 
-  if (isLoading) {
+  // Show a generic loading screen while authentication OR settings are still resolving
+  if (isAuthLoading || (isAuthenticated && (!isSettingsInitialized || isSettingsLoading))) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <div className="text-slate-400 text-sm animate-pulse">Authenticating…</div>
+        <div className="text-slate-400 text-sm font-medium animate-pulse">Loading preferences...</div>
       </div>
     );
   }

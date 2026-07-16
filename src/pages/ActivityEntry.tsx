@@ -6,15 +6,17 @@ import { ActivityForm } from '@/components/forms/ActivityForm';
 import { SuccessAnimation, ErrorAlert, Card } from '@/components/ui';
 import { todayDate, formatDate, compareTime, formatTime12h, calcEndTime } from '@/utils/timeUtils';
 import { OverlapDialog } from '@/components/activity/OverlapDialog';
+import { useSettings } from '@/context/SettingsContext';
 
 export function ActivityEntry() {
+  const { settings } = useSettings();
   const [showSuccess, setShowSuccess] = useState(false);
   
   // Overlap state
   const [pendingActivity, setPendingActivity] = useState<ActivityType | null>(null);
   const [conflictActivity, setConflictActivity] = useState<ActivityType | null>(null);
 
-  const today = todayDate();
+  const today = todayDate(settings.wakeUpTime);
 
   const { isSaving, error, saveActivity, clearError, activities } = useActivities({
     date: today,
@@ -23,7 +25,7 @@ export function ActivityEntry() {
 
   // Most recent activity today
   const lastActivity = activities.length > 0 
-    ? [...activities].sort((a, b) => compareTime(b.startTime, a.startTime))[0] 
+    ? [...activities].sort((a, b) => compareTime(b.startTime, a.startTime, settings.wakeUpTime))[0] 
     : null;
 
   const performSave = async (activity: ActivityType) => {
@@ -38,11 +40,11 @@ export function ActivityEntry() {
   };
 
   const handleSave = async (activity: ActivityType): Promise<boolean> => {
-    // Check for overlaps
+    // Check for overlaps logically anchoring to wakeUpTime
     const overlap = activities.find(a => {
-      const aStart = compareTime(a.startTime, a.endTime) < 0 ? a.startTime : a.endTime;
-      const aEnd = compareTime(a.startTime, a.endTime) > 0 ? a.startTime : a.endTime;
-      return compareTime(activity.startTime, aEnd) < 0 && compareTime(activity.endTime, aStart) > 0;
+      const aStart = compareTime(a.startTime, a.endTime, settings.wakeUpTime) < 0 ? a.startTime : a.endTime;
+      const aEnd = compareTime(a.startTime, a.endTime, settings.wakeUpTime) > 0 ? a.startTime : a.endTime;
+      return compareTime(activity.startTime, aEnd, settings.wakeUpTime) < 0 && compareTime(activity.endTime, aStart, settings.wakeUpTime) > 0;
     });
 
     if (overlap) {
@@ -56,7 +58,7 @@ export function ActivityEntry() {
 
   const handleResolveAuto = () => {
     if (!pendingActivity || !conflictActivity) return;
-    const aEnd = compareTime(conflictActivity.startTime, conflictActivity.endTime) > 0 
+    const aEnd = compareTime(conflictActivity.startTime, conflictActivity.endTime, settings.wakeUpTime) > 0 
       ? conflictActivity.startTime 
       : conflictActivity.endTime;
       
@@ -93,7 +95,7 @@ export function ActivityEntry() {
           <Sparkles className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-indigo-200">
             <strong>Quick tip:</strong> End time is <em>now</em>, Start time is when the activity began.
-            Press <kbd className="px-1 py-0.5 rounded bg-indigo-500/20 font-mono">Ctrl+Enter</kbd> to save instantly.
+            <span className="hidden md:inline"> Press <kbd className="px-1 py-0.5 rounded bg-indigo-500/20 font-mono">Ctrl+Enter</kbd> to save instantly.</span>
           </p>
         </div>
 

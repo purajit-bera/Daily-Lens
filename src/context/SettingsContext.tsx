@@ -7,6 +7,7 @@ interface SettingsContextType {
   settings: Settings;
   updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>;
   isLoading: boolean;
+  isInitialized: boolean;
   error: string | null;
 }
 
@@ -16,13 +17,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { accessToken, spreadsheetId, isAuthenticated } = useAuth();
   
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Initial fetch when authenticated
   useEffect(() => {
     if (!isAuthenticated || !accessToken || !spreadsheetId) {
-      // If not authenticated, we could load from localStorage as fallback, but the user requested cloud truth.
+      // If not authenticated, keep in default state but mark not loading
+      setIsLoading(false);
       return;
     }
 
@@ -33,12 +36,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then(fetchedSettings => {
         if (isMounted) {
           setSettings(fetchedSettings);
+          setIsInitialized(true);
           setError(null);
         }
       })
       .catch(err => {
         console.error('Failed to load settings:', err);
-        if (isMounted) setError('Failed to load settings from Google Sheets.');
+        if (isMounted) {
+          setError('Failed to load settings from Google Sheets.');
+          setIsInitialized(true); // Treat as initialized even on error to prevent infinite loading lock
+        }
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -66,7 +73,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [settings, accessToken, spreadsheetId]);
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSetting, isLoading, error }}>
+    <SettingsContext.Provider value={{ settings, updateSetting, isLoading, isInitialized, error }}>
       {children}
     </SettingsContext.Provider>
   );

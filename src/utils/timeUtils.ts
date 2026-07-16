@@ -11,9 +11,17 @@ dayjs.extend(isSameOrAfter);
 
 // ── Formatting ────────────────────────────────────────────────
 
-/** Today's date as YYYY-MM-DD in local timezone */
-export function todayDate(): string {
-  return dayjs().format('YYYY-MM-DD');
+/** 
+ * Today's logical date as YYYY-MM-DD in local timezone.
+ * If current time is before wakeUpTime, it returns yesterday's date.
+ */
+export function todayDate(wakeUpTime: string = '00:00'): string {
+  const now = dayjs();
+  const wake = dayjs(`${now.format('YYYY-MM-DD')} ${wakeUpTime}`, 'YYYY-MM-DD HH:mm');
+  if (now.isBefore(wake)) {
+    return now.subtract(1, 'day').format('YYYY-MM-DD');
+  }
+  return now.format('YYYY-MM-DD');
 }
 
 /** Current time as HH:mm (24h) */
@@ -61,21 +69,37 @@ export function formatDurationLong(minutes: number): string {
   return `${h} hour${h !== 1 ? 's' : ''} ${m} minute${m !== 1 ? 's' : ''}`;
 }
 
+// ── Logical Time Math ──────────────────────────────────────────
+
+/**
+ * Normalizes a time string (HH:mm) relative to a wakeUpTime.
+ * Returns the number of minutes since wakeUpTime.
+ * If time is before wakeUpTime, it's considered to be on the next physical day within the same logical day.
+ */
+export function getMinutesSinceWakeUp(time: string, wakeUpTime: string = '00:00'): number {
+  const t = dayjs(`2000-01-01 ${time}`, 'YYYY-MM-DD HH:mm');
+  const w = dayjs(`2000-01-01 ${wakeUpTime}`, 'YYYY-MM-DD HH:mm');
+  if (t.isBefore(w)) {
+    return t.add(1, 'day').diff(w, 'minute');
+  }
+  return t.diff(w, 'minute');
+}
+
 // ── Time Sync Calculations ────────────────────────────────────
 
 /**
- * Calculate duration in minutes between two HH:mm times.
- * startTime is the earlier time, endTime is the later time.
- * Handles crossing midnight correctly.
+ * Calculate duration in minutes between two HH:mm times, relative to a wakeUpTime anchor.
+ * startTime is the earlier logical time, endTime is the later logical time.
  */
-export function calcDuration(startTime: string, endTime: string): number {
-  const start = dayjs(`2000-01-01 ${startTime}`, 'YYYY-MM-DD HH:mm');
-  let end = dayjs(`2000-01-01 ${endTime}`, 'YYYY-MM-DD HH:mm');
-  // if end is before start, it implies it crossed midnight into the next day
-  if (end.isBefore(start)) {
-    end = end.add(1, 'day');
+export function calcDuration(startTime: string, endTime: string, wakeUpTime: string = '00:00'): number {
+  const startMins = getMinutesSinceWakeUp(startTime, wakeUpTime);
+  const endMins = getMinutesSinceWakeUp(endTime, wakeUpTime);
+  let dur = endMins - startMins;
+  if (dur < 0) {
+    // If end is logically before start, it implies crossing into the next logical day
+    dur += 24 * 60;
   }
-  return Math.abs(end.diff(start, 'minute'));
+  return dur;
 }
 
 /**
@@ -100,11 +124,11 @@ export function calcStartTime(endTime: string, durationMinutes: number): string 
 
 // ── Sorting ───────────────────────────────────────────────────
 
-/** Compare two HH:mm strings for sorting (ascending) */
-export function compareTime(a: string, b: string): number {
-  const ta = dayjs(`2000-01-01 ${a}`, 'YYYY-MM-DD HH:mm');
-  const tb = dayjs(`2000-01-01 ${b}`, 'YYYY-MM-DD HH:mm');
-  return ta.isBefore(tb) ? -1 : ta.isAfter(tb) ? 1 : 0;
+/** Compare two HH:mm strings for sorting (ascending) logically anchored to wakeUpTime */
+export function compareTime(a: string, b: string, wakeUpTime: string = '00:00'): number {
+  const diffA = getMinutesSinceWakeUp(a, wakeUpTime);
+  const diffB = getMinutesSinceWakeUp(b, wakeUpTime);
+  return diffA - diffB;
 }
 
 // ── Date ranges ───────────────────────────────────────────────

@@ -21,7 +21,7 @@ function getDefaultState(): TimeSyncState {
  * - Change endTime  → duration = end - start (start stays fixed)
  * - Change startTime → duration = end - start (end stays fixed)
  */
-export function useTimeSync(date: string, initial?: Partial<TimeSyncState>) {
+export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wakeUpTime: string = '00:00') {
   const [state, setState] = useState<TimeSyncState & { isManualEndTime: boolean }>(() => ({
     ...getDefaultState(),
     isManualEndTime: !!(initial && initial.endTime),
@@ -29,7 +29,7 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>) {
   }));
 
   useEffect(() => {
-    if (state.isManualEndTime || date !== todayDate()) return;
+    if (state.isManualEndTime || date !== todayDate(wakeUpTime)) return;
     
     const timer = setInterval(() => {
       const now = currentTime();
@@ -43,7 +43,7 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>) {
     }, 1000);
     
     return () => clearInterval(timer);
-  }, [state.isManualEndTime, state.endTime, date]);
+  }, [state.isManualEndTime, state.endTime, date, wakeUpTime]);
 
   const setStartTime = useCallback((startTime: string) => {
     setState(prev => {

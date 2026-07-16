@@ -29,7 +29,7 @@ export function ActivityTimeline({ items, emptyMessage, onEdit, onDelete }: Acti
           return (
             <Card
               key={item.id}
-              className="p-3 border border-dashed border-white/10 bg-white/5 flex items-center justify-between"
+              className="p-3 border border-dashed border-white/10 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Clock className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
