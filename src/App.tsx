@@ -17,13 +17,8 @@ function ProtectedRoutes() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { isInitialized: isSettingsInitialized, isLoading: isSettingsLoading } = useSettings();
 
-  // Show a generic loading screen while authentication OR settings are still resolving
-  if (isAuthLoading || (isAuthenticated && (!isSettingsInitialized || isSettingsLoading))) {
-    return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <div className="text-slate-400 text-sm font-medium animate-pulse">Loading preferences...</div>
-      </div>
-    );
+  if (isAuthLoading) {
+    return null; // Global LoadingContext overlay covers the screen
   }
 
   if (!isAuthenticated) {
@@ -65,15 +60,15 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={clientId}>
       <ThemeProvider>
-        <AuthProvider>
-          <SettingsProvider>
-            <LoadingProvider>
+        <LoadingProvider>
+          <AuthProvider>
+            <SettingsProvider>
               <BrowserRouter>
                 <ProtectedRoutes />
               </BrowserRouter>
-            </LoadingProvider>
-          </SettingsProvider>
-        </AuthProvider>
+            </SettingsProvider>
+          </AuthProvider>
+        </LoadingProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>
   );

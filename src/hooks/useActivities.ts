@@ -41,8 +41,8 @@ interface UseActivitiesReturn {
 
 export function useActivities(options: UseActivitiesOptions = {}): UseActivitiesReturn {
   const { date, autoFetch = false } = options;
-  const { accessToken, spreadsheetId, isAuthenticated } = useAuth();
-  const { showLoading, hideLoading, showSyncing, hideSyncing } = useLoading();
+  const { isAuthenticated } = useAuth();
+  const { startOperation, endOperation, showSyncing, hideSyncing, showCriticalError } = useLoading();
 
   const [allActivities, setAllActivities] = useState<Activity[]>(getCachedActivities);
   
@@ -68,7 +68,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
   // We fetch all to keep the cache fully populated and in sync,
   // but we do it silently without blocking the UI if cache exists.
   const refetchAll = useCallback(async (force = false) => {
-    if (!accessToken || !spreadsheetId) return;
+    if (!isAuthenticated) return;
 
     // Rate limiting: if we already have data and it's been less than the cooldown, don't fetch again
     const now = Date.now();
@@ -79,7 +79,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
     setIsLoading(true);
     // Only show blocking loader if we have absolutely no data
     if (allActivities.length === 0) {
-      showLoading('Syncing with Google Sheets...');
+      startOperation('activities', 'Loading today\'s activities...');
     } else {
       showSyncing();
     }
@@ -87,7 +87,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
     try {
       // Deduplication: if a fetch is already in progress, wait for it instead of starting a new one
       if (!fetchPromise) {
-        fetchPromise = fetchAllActivities(accessToken, spreadsheetId).finally(() => {
+        fetchPromise = fetchAllActivities().finally(() => {
           fetchPromise = null;
         });
       }
@@ -95,16 +95,17 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
       lastFetchTime = Date.now();
       syncLocalActivities(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load activities.');
+      const msg = err instanceof Error ? err.message : 'Failed to load activities.';
+      setError(msg);
+      if (allActivities.length === 0) {
+        showCriticalError('Unable to load your activities.');
+      }
     } finally {
       setIsLoading(false);
-      if (allActivities.length === 0) {
-        hideLoading();
-      } else {
-        hideSyncing();
-      }
+      hideSyncing();
+      endOperation('activities');
     }
-  }, [accessToken, spreadsheetId, showLoading, hideLoading, showSyncing, hideSyncing, allActivities.length, syncLocalActivities]);
+  }, [isAuthenticated, allActivities.length, syncLocalActivities, startOperation, endOperation, showSyncing, hideSyncing, showCriticalError]);
 
   const refetchByDate = useCallback(
     async (targetDate: string) => {
@@ -124,7 +125,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
 
   const saveActivity = useCallback(
     async (activity: Activity): Promise<boolean> => {
-      if (!accessToken || !spreadsheetId) {
+      if (!isAuthenticated) {
         setError('Not authenticated. Please log in again.');
         return false;
       }
@@ -135,7 +136,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
       syncLocalActivities([...allActivities, activity]);
 
       try {
-        await appendActivity(accessToken, spreadsheetId, activity);
+        await appendActivity(activity);
         return true;
       } catch (err) {
         // Rollback
@@ -146,12 +147,12 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
         setIsSaving(false);
       }
     },
-    [accessToken, spreadsheetId, allActivities, syncLocalActivities]
+    [isAuthenticated, allActivities, syncLocalActivities]
   );
 
   const updateActivity = useCallback(
     async (activity: Activity): Promise<boolean> => {
-      if (!accessToken || !spreadsheetId) return false;
+      if (!isAuthenticated) return false;
       setIsSaving(true);
       setError(null);
       
@@ -160,7 +161,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
       syncLocalActivities(allActivities.map(a => (a.id === activity.id ? activity : a)));
 
       try {
-        await updateActivityInSheet(accessToken, spreadsheetId, activity);
+        await updateActivityInSheet(activity);
         return true;
       } catch (err) {
         // Rollback
@@ -171,12 +172,12 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
         setIsSaving(false);
       }
     },
-    [accessToken, spreadsheetId, allActivities, syncLocalActivities]
+    [isAuthenticated, allActivities, syncLocalActivities]
   );
 
   const deleteActivity = useCallback(
     async (activityId: string, createdAt: string): Promise<boolean> => {
-      if (!accessToken || !spreadsheetId) return false;
+      if (!isAuthenticated) return false;
       setIsSaving(true);
       setError(null);
       
@@ -185,7 +186,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
       syncLocalActivities(allActivities.filter(a => a.id !== activityId));
 
       try {
-        await deleteActivityFromSheet(accessToken, spreadsheetId, activityId, createdAt);
+        await deleteActivityFromSheet(activityId, createdAt);
         return true;
       } catch (err) {
         // Rollback
@@ -196,7 +197,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
         setIsSaving(false);
       }
     },
-    [accessToken, spreadsheetId, allActivities, syncLocalActivities]
+    [isAuthenticated, allActivities, syncLocalActivities]
   );
 
   // Auto-fetch on mount if enabled and authenticated

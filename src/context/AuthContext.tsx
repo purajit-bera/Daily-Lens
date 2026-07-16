@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import type { GoogleUser, AuthState } from '@/types';
-import { GOOGLE_SCOPES, fetchUserInfo } from '@/services/googleAuth';
-import { findOrCreateSpreadsheet, clearSpreadsheetCache } from '@/services/driveApi';
+import { GOOGLE_SCOPES } from '@/services/googleAuth';
+import { clearSpreadsheetCache } from '@/services/driveApi';
+import { useLoading } from '@/context/LoadingContext';
 
 // ── Context type ──────────────────────────────────────────────
 
@@ -11,39 +12,16 @@ interface AuthContextType extends AuthState {
   logout: () => void;
 }
 
-const AUTH_STORAGE_KEY = 'dal_auth_state';
-
 // ── Default state ─────────────────────────────────────────────
 
 const defaultState: AuthState = {
   isAuthenticated: false,
   user: null,
-  accessToken: null,
-  spreadsheetId: null,
-  isLoading: false,
+  accessToken: null, // No longer used, but kept in type for compatibility if needed elsewhere
+  spreadsheetId: null, // Fetched from backend now
+  isLoading: true, // Start true for initial session check
   error: null,
 };
-
-function getInitialState(): AuthState {
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.accessToken && parsed.user && parsed.spreadsheetId) {
-        return {
-          ...defaultState,
-          isAuthenticated: true,
-          user: parsed.user,
-          accessToken: parsed.accessToken,
-          spreadsheetId: parsed.spreadsheetId,
-        };
-      }
-    }
-  } catch (e) {
-    console.error('Failed to parse auth state', e);
-  }
-  return defaultState;
-}
 
 // ── Context ───────────────────────────────────────────────────
 
@@ -56,23 +34,8 @@ const AuthContext = createContext<AuthContextType>({
 // ── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(getInitialState);
-  const tokenRef = useRef<string | null>(state.accessToken);
-
-  // Persist state changes to localStorage
-  useEffect(() => {
-    if (state.isAuthenticated && state.accessToken && state.user && state.spreadsheetId) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-        accessToken: state.accessToken,
-        user: state.user,
-        spreadsheetId: state.spreadsheetId,
-      }));
-      tokenRef.current = state.accessToken;
-    } else if (!state.isAuthenticated) {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      tokenRef.current = null;
-    }
-  }, [state.isAuthenticated, state.accessToken, state.user, state.spreadsheetId]);
+  const [state, setState] = useState<AuthState>(defaultState);
+  const { startOperation, endOperation, showCriticalError } = useLoading();
 
   const setLoading = (isLoading: boolean) =>
     setState(s => ({ ...s, isLoading, error: null }));
@@ -80,37 +43,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setError = (error: string) =>
     setState(s => ({ ...s, isLoading: false, error }));
 
-  const handleLoginSuccess = useCallback(async (tokenResponse: { access_token: string }) => {
+  // Check session on mount
+  useEffect(() => {
+    let mounted = true;
+    startOperation('auth', 'Verifying your session...');
+    
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted) {
+            setState({
+              isAuthenticated: true,
+              user: data.user,
+              accessToken: 'backend-managed',
+              spreadsheetId: data.spreadsheetId,
+              isLoading: false,
+              error: null,
+            });
+          }
+        } else {
+          if (mounted) setLoading(false);
+        }
+      } catch (err) {
+        if (mounted) setLoading(false);
+      } finally {
+        if (mounted) endOperation('auth');
+      }
+    }
+    
+    checkSession();
+    return () => { mounted = false; };
+  }, [startOperation, endOperation]);
+
+  const handleLoginSuccess = useCallback(async (codeResponse: any) => {
     try {
       setLoading(true);
-      const accessToken = tokenResponse.access_token;
-      tokenRef.current = accessToken;
+      startOperation('auth_exchange', 'Connecting to your account...');
+      
+      const res = await fetch('/api/auth/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          code: codeResponse.code,
+          redirectUri: window.location.origin, // or postmessage
+        }),
+      });
 
-      // Fetch user profile
-      const userInfo = await fetchUserInfo(accessToken);
-      const user: GoogleUser = {
-        name: userInfo.name,
-        email: userInfo.email,
-        picture: userInfo.picture,
-        sub: userInfo.sub,
-      };
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Authentication failed. Please try again.');
+      }
 
-      // Find or create the spreadsheet
-      const spreadsheetId = await findOrCreateSpreadsheet(accessToken);
-
+      const data = await res.json();
+      
+      // We need to fetch `/api/auth/me` to get spreadsheetId since exchange might not return it directly,
+      // or we can update `exchange` to return `spreadsheetId` (which we did).
+      
       setState({
         isAuthenticated: true,
-        user,
-        accessToken,
-        spreadsheetId,
+        user: data.user,
+        accessToken: 'backend-managed',
+        spreadsheetId: data.spreadsheetId || 'backend-managed',
         isLoading: false,
         error: null,
       });
+      
+      // Reload page to re-fetch settings/activities with fresh session
+      window.location.reload();
+      
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Authentication failed. Please try again.';
       setError(msg);
+      showCriticalError(msg);
+    } finally {
+      endOperation('auth_exchange');
     }
-  }, []);
+  }, [startOperation, endOperation, showCriticalError]);
 
   const googleLogin = useGoogleLogin({
     onSuccess: handleLoginSuccess,
@@ -118,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(err.error_description ?? 'Google login failed. Please try again.');
     },
     scope: GOOGLE_SCOPES,
-    flow: 'implicit',
+    flow: 'auth-code',
   });
 
   const login = useCallback(() => {
@@ -126,11 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     googleLogin();
   }, [googleLogin]);
 
-  const logout = useCallback(() => {
-    tokenRef.current = null;
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout failed', e);
+    }
     clearSpreadsheetCache();
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    setState(defaultState);
+    setState({ ...defaultState, isLoading: false });
   }, []);
 
   useEffect(() => {

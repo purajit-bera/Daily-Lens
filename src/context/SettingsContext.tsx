@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type Settings } from '@/config/settings';
 import { fetchSettings, syncSettings } from '@/services/settingsApi';
 import { getCachedSettings, setCachedSettings } from '@/services/cacheService';
 import { useAuth } from './AuthContext';
+import { useLoading } from './LoadingContext';
 
 interface SettingsContextType {
   settings: Settings;
@@ -15,7 +16,8 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const { accessToken, spreadsheetId, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const { startOperation, endOperation, showCriticalError } = useLoading();
   
   const [settings, setSettings] = useState<Settings>(getCachedSettings);
   const [isLoading, setIsLoading] = useState(false); // Background sync status
@@ -24,55 +26,63 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // Initial fetch when authenticated
   useEffect(() => {
-    if (!isAuthenticated || !accessToken || !spreadsheetId) {
-      // If not authenticated, keep in default state but mark not loading
-      setIsLoading(false);
-      return;
-    }
-
     let isMounted = true;
-    setIsLoading(true);
+    if (isAuthenticated) {
+      setIsLoading(true);
+      startOperation('settings', 'Restoring your preferences...');
+      fetchSettings()
+        .then(fetchedSettings => {
+          if (isMounted) {
+            const merged = { ...DEFAULT_SETTINGS, ...(fetchedSettings || {}) };
+            setSettings(merged);
+            setCachedSettings(merged);
+            setIsInitialized(true);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load settings:', err);
+          if (isMounted) {
+            setError(err.message);
+            showCriticalError('Couldn\'t restore your preferences.');
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+            endOperation('settings');
+          }
+        });
+    } else {
+      setSettings(DEFAULT_SETTINGS);
+      setIsLoading(false);
+    }
     
-    fetchSettings(accessToken, spreadsheetId)
-      .then(fetchedSettings => {
-        if (isMounted) {
-          setSettings(fetchedSettings);
-          setCachedSettings(fetchedSettings);
-          setError(null);
-        }
-      })
-      .catch(err => {
-        console.error('Failed to load settings:', err);
-        if (isMounted) {
-          setError('Failed to load settings from Google Sheets.');
-        }
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
-
     return () => { isMounted = false; };
-  }, [isAuthenticated, accessToken, spreadsheetId]);
+  }, [isAuthenticated, startOperation, endOperation, showCriticalError]);
 
   const updateSetting = useCallback(async <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    if (!accessToken || !spreadsheetId) return;
-    
+    const previousSettings = { ...settings };
     const newSettings = { ...settings, [key]: value };
+    
     // Optimistic update
     setSettings(newSettings);
     setCachedSettings(newSettings);
-    setError(null);
 
     try {
-      await syncSettings(accessToken, spreadsheetId, newSettings);
+      setIsLoading(true);
+      // We don't block the UI with startOperation here, just show background sync status
+      await syncSettings(newSettings);
     } catch (err) {
-      console.error('Failed to sync setting:', err);
-      // Revert on failure
-      setSettings(settings);
-      setCachedSettings(settings);
-      setError('Failed to save setting to Google Sheets.');
+      console.error('Failed to save setting:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save setting');
+      // Revert on error
+      setSettings(previousSettings);
+      setCachedSettings(previousSettings);
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
-  }, [settings, accessToken, spreadsheetId]);
+  }, [settings]);
 
   return (
     <SettingsContext.Provider value={{ settings, updateSetting, isLoading, isInitialized, error }}>
