@@ -6,8 +6,9 @@ import { useTimeSync } from '@/hooks/useTimeSync';
 import { useSettings } from '@/context/SettingsContext';
 import { RichTextEditor } from './RichTextEditor';
 import { Button, Card, ErrorAlert, cn } from '@/components/ui';
-import { todayDate, generateId, formatTime12h, currentTime, calcStartTime, calcEndTime, formatDurationLong } from '@/utils/timeUtils';
+import { todayDate, generateId, formatTime12h, currentTime, calcStartTime, calcEndTime, formatDurationLong, compareTime, calcDuration } from '@/utils/timeUtils';
 import { validateActivity } from '@/utils/validators';
+import { useActivities } from '@/hooks/useActivities';
 
 const DRAFT_KEY = 'dal_draft';
 const RECENT_KEY = 'dal_recent_activities';
@@ -66,6 +67,25 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
   } : undefined, settings.wakeUpTime);
   const description = watch('description');
   const category = watch('category');
+
+  const { activities } = useActivities({ date });
+  const lastActivity = activities.length > 0 
+    ? [...activities].sort((a, b) => compareTime(b.startTime, a.startTime, settings.wakeUpTime))[0] 
+    : null;
+
+  const handleContinue = useCallback(() => {
+    const isToday = date === todayDate(settings.wakeUpTime);
+    const newStart = lastActivity 
+      ? calcEndTime(lastActivity.endTime, 1) 
+      : settings.wakeUpTime;
+    const newEnd = isToday ? currentTime() : timeSync.endTime;
+    
+    timeSync.setAll({
+      startTime: newStart,
+      endTime: newEnd,
+      durationMinutes: calcDuration(newStart, newEnd, settings.wakeUpTime)
+    });
+  }, [date, lastActivity, settings.wakeUpTime, timeSync]);
 
   const [durationStr, setDurationStr] = useState(timeSync.durationMinutes.toString());
   useEffect(() => {
@@ -227,17 +247,55 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
               <Clock className="w-3.5 h-3.5" />
               Time
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                timeSync.reset();
-                setDurationStr('60');
-              }}
-              className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              Reset Time
-            </button>
+            <div className="flex gap-2">
+              {!initialData && (
+                <button
+                  type="button"
+                  onClick={handleContinue}
+                  className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  Continue
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  timeSync.reset();
+                  setDurationStr('60');
+                }}
+                className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Reset Time
+              </button>
+            </div>
           </div>
+
+          <div className="flex items-center justify-between bg-white/5 rounded-lg p-1.5 mb-3 border border-white/10">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 ml-2">Keep Fixed:</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => timeSync.setTimeAnchor('start')}
+                className={cn(
+                  "text-[10px] uppercase font-bold tracking-wider px-3 py-1 rounded transition-colors",
+                  timeSync.timeAnchor === 'start' ? "bg-brand-500/20 text-brand-300" : "text-slate-400 hover:bg-white/10 hover:text-white"
+                )}
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={() => timeSync.setTimeAnchor('end')}
+                className={cn(
+                  "text-[10px] uppercase font-bold tracking-wider px-3 py-1 rounded transition-colors",
+                  timeSync.timeAnchor === 'end' ? "bg-brand-500/20 text-brand-300" : "text-slate-400 hover:bg-white/10 hover:text-white"
+                )}
+              >
+                End
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-2">
             {/* Start Time */}
             <div>
@@ -262,8 +320,10 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
                 }}
                 className={cn(
                   'w-full bg-transparent text-white text-xs rounded-xl px-2 py-2',
-                  'border border-white/10 focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30',
-                  'outline-none transition-all duration-250 dark:[color-scheme:dark]'
+                  'outline-none transition-all duration-250 dark:[color-scheme:dark]',
+                  timeSync.timeAnchor === 'start'
+                    ? 'border border-brand-500/50 ring-1 ring-brand-500/30'
+                    : 'border border-white/10 focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30'
                 )}
               />
             </div>
@@ -291,8 +351,10 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
                 }}
                 className={cn(
                   'w-full bg-transparent text-white text-xs rounded-xl px-2 py-2',
-                  'border border-white/10 focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30',
-                  'outline-none transition-all duration-250 dark:[color-scheme:dark]'
+                  'outline-none transition-all duration-250 dark:[color-scheme:dark]',
+                  timeSync.timeAnchor === 'end'
+                    ? 'border border-brand-500/50 ring-1 ring-brand-500/30'
+                    : 'border border-white/10 focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30'
                 )}
               />
             </div>

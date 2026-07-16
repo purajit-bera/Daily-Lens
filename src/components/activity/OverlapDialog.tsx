@@ -63,7 +63,7 @@ export function OverlapDialog({
           >
             <div>
               <p className="text-sm font-bold text-brand-300 mb-1">(Recommended) Adjust Automatically</p>
-              <p className="text-xs text-slate-400">Start the new activity 1 minute after the previous one ends.</p>
+              <p className="text-xs text-slate-400">Start the new activity 1 minute after the previous one ends, keeping your selected end time.</p>
             </div>
             <ArrowRight className="w-5 h-5 text-brand-400 opacity-50 group-hover:opacity-100 transition-opacity" />
           </button>

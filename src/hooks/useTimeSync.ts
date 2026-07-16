@@ -13,18 +13,22 @@ function getDefaultState(): TimeSyncState {
   };
 }
 
+export type TimeAnchor = 'start' | 'end';
+
 /**
  * Manages synchronized time fields: startTime, endTime, durationMinutes.
  *
  * Sync rules:
- * - Change duration → start = end - duration (end stays fixed)
+ * - Change duration (Anchor = end) → start = end - duration (end stays fixed)
+ * - Change duration (Anchor = start) → end = start + duration (start stays fixed)
  * - Change endTime  → duration = end - start (start stays fixed)
  * - Change startTime → duration = end - start (end stays fixed)
  */
 export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wakeUpTime: string = '00:00') {
-  const [state, setState] = useState<TimeSyncState & { isManualEndTime: boolean }>(() => ({
+  const [state, setState] = useState<TimeSyncState & { isManualEndTime: boolean, timeAnchor: TimeAnchor }>(() => ({
     ...getDefaultState(),
     isManualEndTime: !!(initial && initial.endTime),
+    timeAnchor: 'end',
     ...initial,
   }));
 
@@ -47,28 +51,49 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wake
 
   const setStartTime = useCallback((startTime: string) => {
     setState(prev => {
-      const duration = calcDuration(startTime, prev.endTime);
-      return { startTime, endTime: prev.endTime, durationMinutes: duration, isManualEndTime: true };
+      const duration = calcDuration(startTime, prev.endTime, wakeUpTime);
+      return { ...prev, startTime, durationMinutes: duration, isManualEndTime: true };
     });
-  }, []);
+  }, [wakeUpTime]);
 
   const setEndTime = useCallback((endTime: string) => {
     setState(prev => {
-      const duration = calcDuration(prev.startTime, endTime);
-      return { startTime: prev.startTime, endTime, durationMinutes: duration, isManualEndTime: true };
+      const duration = calcDuration(prev.startTime, endTime, wakeUpTime);
+      return { ...prev, endTime, durationMinutes: duration, isManualEndTime: true };
     });
-  }, []);
+  }, [wakeUpTime]);
 
   const setDuration = useCallback((durationMinutes: number) => {
     setState(prev => {
       const safeMin = Math.max(1, Math.min(1440, durationMinutes));
-      const startTime = calcStartTime(prev.endTime, safeMin);
-      return { startTime, endTime: prev.endTime, durationMinutes: safeMin, isManualEndTime: true };
+      
+      if (prev.timeAnchor === 'end') {
+        const startTime = calcStartTime(prev.endTime, safeMin);
+        return { ...prev, startTime, durationMinutes: safeMin, isManualEndTime: true };
+      } else {
+        let endTime = calcEndTime(prev.startTime, safeMin);
+        let finalDuration = safeMin;
+        
+        // Future time restriction for today
+        if (date === todayDate(wakeUpTime)) {
+          const now = currentTime();
+          if (endTime > now) {
+            endTime = now;
+            finalDuration = calcDuration(prev.startTime, endTime, wakeUpTime);
+          }
+        }
+        
+        return { ...prev, endTime, durationMinutes: finalDuration, isManualEndTime: true };
+      }
     });
+  }, [date, wakeUpTime]);
+
+  const setTimeAnchor = useCallback((timeAnchor: TimeAnchor) => {
+    setState(prev => ({ ...prev, timeAnchor }));
   }, []);
 
   const reset = useCallback(() => {
-    setState({ ...getDefaultState(), isManualEndTime: false });
+    setState({ ...getDefaultState(), isManualEndTime: false, timeAnchor: 'end' });
   }, []);
 
   const setAll = useCallback((s: Partial<TimeSyncState>) => {
@@ -79,6 +104,8 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wake
     startTime: state.startTime,
     endTime: state.endTime,
     durationMinutes: state.durationMinutes,
+    timeAnchor: state.timeAnchor,
+    setTimeAnchor,
     setStartTime,
     setEndTime,
     setDuration,

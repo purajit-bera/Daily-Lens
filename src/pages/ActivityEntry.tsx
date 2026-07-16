@@ -4,7 +4,7 @@ import type { Activity as ActivityType } from '@/types';
 import { useActivities } from '@/hooks/useActivities';
 import { ActivityForm } from '@/components/forms/ActivityForm';
 import { SuccessAnimation, ErrorAlert, Card } from '@/components/ui';
-import { todayDate, formatDate, compareTime, formatTime12h, calcEndTime } from '@/utils/timeUtils';
+import { todayDate, formatDate, compareTime, formatTime12h, calcEndTime, calcDuration } from '@/utils/timeUtils';
 import { OverlapDialog } from '@/components/activity/OverlapDialog';
 import { useSettings } from '@/context/SettingsContext';
 
@@ -63,11 +63,14 @@ export function ActivityEntry() {
       : conflictActivity.endTime;
       
     const adjustedStart = calcEndTime(aEnd, 1);
-    const adjustedEnd = calcEndTime(adjustedStart, pendingActivity.durationMinutes);
+    const adjustedEnd = pendingActivity.endTime;
+    const recalculatedDuration = calcDuration(adjustedStart, adjustedEnd, settings.wakeUpTime);
+    
     performSave({
       ...pendingActivity,
       startTime: adjustedStart,
       endTime: adjustedEnd,
+      durationMinutes: recalculatedDuration,
     });
   };
 
