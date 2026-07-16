@@ -29,6 +29,7 @@ import {
   Modal,
   SuccessAnimation,
   cn,
+  Skeleton,
 } from '@/components/ui';
 import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getDayLabel, compareTime, calcDuration, currentTime, formatTime12h } from '@/utils/timeUtils';
 import { scoreLabel, scoreColor } from '@/utils/insights';
@@ -266,10 +267,17 @@ export function Statistics() {
       {/* Error */}
       {error && <ErrorAlert error={error} onDismiss={clearError} />}
 
-      {/* Loading */}
+      {/* Loading Skeleton */}
       {isLoading && (
-        <div className="py-16">
-          <LoadingSpinner size="lg" label="Loading your activities…" />
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+          </div>
+          <Skeleton className="h-32 w-full" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
         </div>
       )}
 

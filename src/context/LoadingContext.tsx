@@ -4,15 +4,22 @@ import { LoadingSpinner } from '@/components/ui';
 interface LoadingContextType {
   showLoading: (message?: string) => void;
   hideLoading: () => void;
+  showSyncing: () => void;
+  hideSyncing: () => void;
+  isSyncing: boolean;
 }
 
 const LoadingContext = createContext<LoadingContextType>({
   showLoading: () => {},
   hideLoading: () => {},
+  showSyncing: () => {},
+  hideSyncing: () => {},
+  isSyncing: false,
 });
 
 export function LoadingProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [message, setMessage] = useState<string>('Please wait...');
 
   const showLoading = useCallback((msg = 'Please wait...') => {
@@ -24,8 +31,11 @@ export function LoadingProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  const showSyncing = useCallback(() => setIsSyncing(true), []);
+  const hideSyncing = useCallback(() => setIsSyncing(false), []);
+
   return (
-    <LoadingContext.Provider value={{ showLoading, hideLoading }}>
+    <LoadingContext.Provider value={{ showLoading, hideLoading, showSyncing, hideSyncing, isSyncing }}>
       {children}
       {isLoading && (
         <div

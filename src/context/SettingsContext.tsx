@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { DEFAULT_SETTINGS, type Settings } from '@/config/settings';
 import { fetchSettings, syncSettings } from '@/services/settingsApi';
+import { getCachedSettings, setCachedSettings } from '@/services/cacheService';
 import { useAuth } from './AuthContext';
 
 interface SettingsContextType {
@@ -16,9 +17,9 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { accessToken, spreadsheetId, isAuthenticated } = useAuth();
   
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [settings, setSettings] = useState<Settings>(getCachedSettings);
+  const [isLoading, setIsLoading] = useState(false); // Background sync status
+  const [isInitialized, setIsInitialized] = useState(true); // Always initialized from cache
   const [error, setError] = useState<string | null>(null);
 
   // Initial fetch when authenticated
@@ -36,7 +37,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then(fetchedSettings => {
         if (isMounted) {
           setSettings(fetchedSettings);
-          setIsInitialized(true);
+          setCachedSettings(fetchedSettings);
           setError(null);
         }
       })
@@ -44,7 +45,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         console.error('Failed to load settings:', err);
         if (isMounted) {
           setError('Failed to load settings from Google Sheets.');
-          setIsInitialized(true); // Treat as initialized even on error to prevent infinite loading lock
         }
       })
       .finally(() => {
@@ -60,6 +60,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const newSettings = { ...settings, [key]: value };
     // Optimistic update
     setSettings(newSettings);
+    setCachedSettings(newSettings);
     setError(null);
 
     try {
@@ -68,6 +69,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       console.error('Failed to sync setting:', err);
       // Revert on failure
       setSettings(settings);
+      setCachedSettings(settings);
       setError('Failed to save setting to Google Sheets.');
     }
   }, [settings, accessToken, spreadsheetId]);

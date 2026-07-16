@@ -212,18 +212,18 @@ interface StatCardProps {
 
 export function StatCard({ label, value, subValue, icon, valueColor, accent, className }: StatCardProps) {
   return (
-    <Card className={cn('p-5', className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-          <p className={cn("text-2xl font-bold truncate", !valueColor && "text-white")} style={{ color: valueColor }}>{value}</p>
-          {subValue && <p className="text-xs text-slate-500 mt-0.5">{subValue}</p>}
-        </div>
+    <Card className={cn('p-4 sm:p-5 flex flex-col', className)}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">{label}</p>
         {icon && (
           <div className="flex-shrink-0 p-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
             {icon}
           </div>
         )}
+      </div>
+      <div className="mt-auto">
+        <p className={cn("text-xl sm:text-2xl font-bold truncate", !valueColor && "text-white")} style={{ color: valueColor }}>{value}</p>
+        {subValue && <p className="text-xs text-slate-500 mt-0.5 truncate">{subValue}</p>}
       </div>
     </Card>
   );
@@ -359,4 +359,8 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
     </div>,
     document.body
   );
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={`animate-pulse bg-white/10 rounded-xl ${className}`} />;
 }

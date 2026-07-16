@@ -2,7 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { Activity, BarChart3, Sun, Moon, LogOut, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useLoading } from '@/context/LoadingContext';
 import { cn } from '@/components/ui';
+import { RefreshCw } from 'lucide-react';
 
 const NAV_LINKS = [
   { to: '/', label: 'Log Activity', icon: Activity, id: 'nav-log' },
@@ -12,6 +14,7 @@ const NAV_LINKS = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, spreadsheetId, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const { isSyncing } = useLoading();
   const { pathname } = useLocation();
 
   const sheetUrl = spreadsheetId
@@ -81,6 +84,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Right actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {isSyncing && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{ background: isDark ? 'rgba(56,189,248,0.1)' : 'rgba(14,165,233,0.1)', color: isDark ? '#38bdf8' : '#0ea5e9' }}
+                title="Syncing with Google Sheets..."
+              >
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span className="hidden sm:inline">Syncing</span>
+              </div>
+            )}
+            
             {sheetUrl && (
               <a
                 href={sheetUrl}
