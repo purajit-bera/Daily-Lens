@@ -77,19 +77,21 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
 
   // Load draft on mount
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const draft = JSON.parse(raw) as Partial<ActivityFormData>;
-        if (draft.date) setValue('date', draft.date);
-        if (draft.category) setValue('category', draft.category);
-        if (draft.description) setValue('description', draft.description);
-        if (draft.startTime) timeSync.setAll({ startTime: draft.startTime });
-        if (draft.endTime && draft.durationMinutes) {
-          timeSync.setAll({ endTime: draft.endTime, durationMinutes: draft.durationMinutes });
+    if (!initialData) {
+      try {
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw) as Partial<ActivityFormData>;
+          if (draft.date) setValue('date', draft.date);
+          if (draft.category) setValue('category', draft.category);
+          if (draft.description) setValue('description', draft.description);
+          if (draft.startTime) timeSync.setAll({ startTime: draft.startTime });
+          if (draft.endTime && draft.durationMinutes) {
+            timeSync.setAll({ endTime: draft.endTime, durationMinutes: draft.durationMinutes });
+          }
         }
-      }
-    } catch { /* ignore */ }
+      } catch { /* ignore */ }
+    }
 
     try {
       const raw = localStorage.getItem(RECENT_KEY);
@@ -100,6 +102,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
 
   // Auto-save draft every 2s
   useEffect(() => {
+    if (initialData) return;
     const timer = setInterval(() => {
       const draft: Partial<ActivityFormData> = {
         date: watch('date'),
@@ -113,7 +116,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
     }, 2000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeSync.startTime, timeSync.endTime, timeSync.durationMinutes]);
+  }, [timeSync.startTime, timeSync.endTime, timeSync.durationMinutes, initialData]);
 
   const handleSave = useCallback(
     async (data: ActivityFormData) => {

@@ -19,6 +19,9 @@ async function findSpreadsheet(accessToken: string): Promise<string | null> {
   );
 
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth-expired'));
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message ?? `Drive API error: ${res.status}`);
   }
@@ -70,6 +73,9 @@ async function createSpreadsheet(accessToken: string): Promise<string> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth-expired'));
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message ?? `Sheets API error: ${res.status}`);
   }

@@ -133,6 +133,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(defaultState);
   }, []);
 
+  useEffect(() => {
+    const handleAuthExpired = () => logout();
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, [logout]);
+
   return (
     <AuthContext.Provider value={{ ...state, login, logout }}>
       {children}

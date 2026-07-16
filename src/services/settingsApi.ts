@@ -12,6 +12,9 @@ function makeHeaders(token: string): HeadersInit {
 
 async function handleResponse(res: Response): Promise<unknown> {
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth-expired'));
+    }
     const err = await res.json().catch(() => ({}));
     const msg = (err as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`;
     throw new Error(msg);

@@ -27,6 +27,9 @@ export async function fetchUserInfo(accessToken: string): Promise<GoogleTokenInf
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth-expired'));
+    }
     throw new Error('Failed to fetch user info');
   }
   return res.json() as Promise<GoogleTokenInfo>;
