@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+/* ── Tailwind v4 custom theme ────────────────────────────────── */
+@theme {
+  /* Fonts */
+  --font-family-sans: 'Inter', system-ui, sans-serif;
+
+  /* Brand colors (indigo) */
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  /* Semantic colors */
+  --color-positive:          #22c55e;
+  --color-positive-light:    #dcfce7;
+  --color-positive-dark:     #166534;
+
+  --color-negative:          #ef4444;
+  --color-negative-light:    #fee2e2;
+  --color-negative-dark:     #991b1b;
+
+  /* Dark backgrounds */
+  --color-dark-bg:   #0a0a0f;
+  --color-dark-bg-2: #111118;
+  --color-dark-bg-3: #18181f;
+
+  /* Shadows */
+  --shadow-glass:          0 8px 32px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.1);
+  --shadow-glass-sm:       0 4px 16px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.08);
+  --shadow-glow:           0 0 40px rgba(99,102,241,.3);
+  --shadow-glow-positive:  0 0 20px rgba(34,197,94,.3);
+  --shadow-glow-negative:  0 0 20px rgba(239,68,68,.3);
+}
+
+/* ── Custom Animations ───────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-down { animation: slide-down 0.3s ease-out forwards; }
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+
+@keyframes bounce-in {
+  0%   { opacity: 0; transform: scale(0.3); }
+  50%  { opacity: 1; transform: scale(1.05); }
+  70%  { transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-bounce-in { animation: bounce-in 0.5s ease-out forwards; }
+
+/* ── Dark mode via .dark class on <html> ─────────────────────── */
+@variant dark (&:where(.dark, .dark *));
+
+/* ── Base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #0a0a0f;
+  color: #f1f5f9;
+  background-image: radial-gradient(ellipse at top, rgba(30,27,75,0.13) 0%, transparent 70%);
+  min-height: 100vh;
+}
+
+html.light body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  background-image: radial-gradient(ellipse at top, rgba(199,210,254,0.15) 0%, transparent 70%);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Focus ring reset */
+*:focus { outline: none; }
+
+/* Native date/time inputs */
+input[type="date"],
+input[type="time"] { color-scheme: dark; }
+
+html.light input[type="date"],
+html.light input[type="time"] { color-scheme: light; }
+
+/* Number input — no arrows */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* ── Gradient backgrounds ────────────────────────────────────── */
+.bg-gradient-brand {
+  background-image: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+.bg-gradient-positive {
+  background-image: linear-gradient(135deg, #22c55e, #16a34a);
+}
+.bg-gradient-negative {
+  background-image: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* ── Glassmorphism utilities ─────────────────────────────────── */
+.glass {
+  background-color: rgba(255,255,255,0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 1rem;
+}
+
+html.light .glass {
+  background-color: rgba(255,255,255,0.85);
+  backdrop-filter: blur(16px);
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,1);
+}
+
+.shadow-glow     { box-shadow: 0 0 40px rgba(99,102,241,.3); }
+.shadow-glass    { box-shadow: 0 8px 32px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.1); }
+.shadow-glass-sm { box-shadow: 0 4px 16px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.08); }
+
+/* ── Tiptap editor styles ────────────────────────────────────── */
+.tiptap {
+  outline: none;
+  min-height: 140px;
+  padding: 0.75rem 1rem;
+}
+
+.tiptap p               { margin: 0.25rem 0; color: #cbd5e1; }
+.tiptap ul              { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+.tiptap ol              { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+.tiptap li              { color: #cbd5e1; font-size: 0.875rem; }
+.tiptap li p            { margin: 0; }
+.tiptap strong          { font-weight: 600; color: #fff; }
+.tiptap em              { font-style: italic; }
+
+/* Tiptap Placeholder */
+.tiptap p.is-editor-empty:first-child::before {
+  color: #64748b;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+html.light .tiptap p,
+html.light .tiptap li   { color: #1e293b; }
+html.light .tiptap strong { color: #0f172a; }
+
+/* ── Gradient text utility ───────────────────────────────────── */
+.gradient-text {
+  background-image: linear-gradient(135deg, #6366f1, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Recharts tooltip ────────────────────────────────────────── */
+.recharts-tooltip-wrapper { outline: none !important; }
+
+/* ── PWA safe area ───────────────────────────────────────────── */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+}
