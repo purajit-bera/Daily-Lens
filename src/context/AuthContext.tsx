@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           code: codeResponse.code,
-          redirectUri: window.location.origin, // or postmessage
+          redirectUri: 'postmessage',
         }),
       });
 
