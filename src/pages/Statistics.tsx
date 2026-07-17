@@ -35,10 +35,12 @@ import {
 } from '@/components/ui';
 import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getDayLabel, compareTime, calcDuration, currentTime, formatTime12h } from '@/utils/timeUtils';
 import { scoreLabel, scoreColor } from '@/utils/insights';
+import { useLoading } from '@/context/LoadingContext';
 
 export function Statistics() {
   const { settings } = useSettings();
   const { updateOverride, clearOverride, isLoading: isOverridesLoading } = useOverrides();
+  const { isSyncing } = useLoading();
   const [selectedDate, setSelectedDate] = useState(() => todayDate(settings.wakeUpTime));
   const [filter, setFilter] = useState<FilterType>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +73,7 @@ export function Statistics() {
   const {
     activities,
     recentActivities,
+    allActivities,
     isLoading,
     isSaving,
     error,
@@ -249,7 +252,18 @@ export function Statistics() {
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">Statistics</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-white">Statistics</h1>
+              {isSyncing && (
+                <span className="text-[10px] font-medium uppercase tracking-wider text-brand-300 bg-brand-500/20 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Syncing
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-400">{formatDate(selectedDate)}</p>
           </div>
         </div>
@@ -280,7 +294,7 @@ export function Statistics() {
       {error && <ErrorAlert error={error} onDismiss={clearError} />}
 
       {/* Loading Skeleton */}
-      {isLoading && (
+      {(isLoading && allActivities.length === 0) && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24 w-full" />)}
@@ -293,7 +307,7 @@ export function Statistics() {
         </div>
       )}
 
-      {!isLoading && (
+      {(!isLoading || allActivities.length > 0) && (
         <>
           {/* Summary stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
