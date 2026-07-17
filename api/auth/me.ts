@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSession } from '../utils/session';
-import { refreshAccessToken, fetchUserInfo } from '../utils/googleClient';
+import { getSession } from '../utils/session.js';
+import { refreshAccessToken, fetchUserInfo } from '../utils/googleClient.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

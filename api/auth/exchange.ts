@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { exchangeCodeForTokens, fetchUserInfo } from '../utils/googleClient';
-import { findOrCreateSpreadsheet } from '../utils/driveClient';
-import { setSessionCookie } from '../utils/session';
+import { exchangeCodeForTokens, fetchUserInfo } from '../utils/googleClient.js';
+import { findOrCreateSpreadsheet } from '../utils/driveClient.js';
+import { setSessionCookie } from '../utils/session.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

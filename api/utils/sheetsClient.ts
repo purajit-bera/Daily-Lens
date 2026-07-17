@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+
 
 const SHEET_NAME = 'Activities';
 const RANGE = `${SHEET_NAME}!A:H`;

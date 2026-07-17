@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+
 
 const SPREADSHEET_NAME = 'Daily Activity Logger';
 

@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+
 
 const SETTINGS_SHEET_NAME = 'Settings';
 const RANGE = `${SETTINGS_SHEET_NAME}!A:B`;

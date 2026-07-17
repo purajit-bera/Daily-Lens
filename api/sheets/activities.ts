@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSession } from '../utils/session';
-import { refreshAccessToken } from '../utils/googleClient';
-import { fetchAllActivities, appendActivity, updateActivityInSheet, deleteActivityFromSheet } from '../utils/sheetsClient';
+import { getSession } from '../utils/session.js';
+import { refreshAccessToken } from '../utils/googleClient.js';
+import { fetchAllActivities, appendActivity, updateActivityInSheet, deleteActivityFromSheet } from '../utils/sheetsClient.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = getSession(req);

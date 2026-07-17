@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSession } from '../utils/session';
-import { refreshAccessToken } from '../utils/googleClient';
-import { fetchSettingsRaw, syncSettingsRaw } from '../utils/settingsClient';
+import { getSession } from '../utils/session.js';
+import { refreshAccessToken } from '../utils/googleClient.js';
+import { fetchSettingsRaw, syncSettingsRaw } from '../utils/settingsClient.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = getSession(req);
