@@ -1,5 +1,6 @@
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Sun, Moon, LogOut, ExternalLink } from 'lucide-react';
+import { Activity, BarChart3, Sun, Moon, LogOut, ExternalLink, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useLoading } from '@/context/LoadingContext';
@@ -16,6 +17,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDark, toggleTheme } = useTheme();
   const { isSyncing } = useLoading();
   const { pathname } = useLocation();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const sheetUrl = spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
@@ -119,25 +132,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {user && (
-              <div className="flex items-center gap-2">
-                <img
-                  src={user.picture}
-                  alt={user.name}
-                  className="w-8 h-8 rounded-full ring-2"
-                  style={{ '--tw-ring-color': 'rgba(99,102,241,0.4)' } as React.CSSProperties}
-                  onError={(e) => {
-                     e.currentTarget.onerror = null;
-                     e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`;
-                  }}
-                />
+              <div className="relative flex items-center gap-2" ref={profileRef}>
                 <button
-                  id="logout-btn"
-                  onClick={logout}
-                  title="Sign out"
-                  className="p-2 rounded-xl text-slate-400 hover:text-red-400 transition-all duration-200"
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  className="relative rounded-full ring-2 transition-all duration-200 hover:ring-brand-500/50 cursor-pointer"
+                  style={{ '--tw-ring-color': 'rgba(99,102,241,0.4)' } as React.CSSProperties}
                 >
-                  <LogOut className="w-4 h-4" />
+                  <img
+                    src={user.picture}
+                    alt={user.name}
+                    className="w-8 h-8 rounded-full"
+                    onError={(e) => {
+                       e.currentTarget.onerror = null;
+                       e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`;
+                    }}
+                  />
                 </button>
+                
+                {isProfileOpen && (
+                  <div 
+                    className="absolute top-full right-0 mt-2 w-48 rounded-xl shadow-lg border backdrop-blur-xl overflow-hidden z-50 animate-fade-in"
+                    style={{
+                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                      backgroundColor: isDark ? 'rgba(17,17,24,0.95)' : 'rgba(255,255,255,0.95)',
+                    }}
+                  >
+                    <div className="px-4 py-3 border-b" style={{ borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
+                      <p className="text-sm font-medium truncate" style={{ color: isDark ? '#fff' : '#0f172a' }}>{user.name}</p>
+                      <p className="text-xs truncate opacity-70" style={{ color: isDark ? '#94a3b8' : '#64748b' }}>{user.email}</p>
+                    </div>
+                    <div className="py-1">
+                      <Link
+                        to="/settings"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-brand-500/10 hover:text-brand-500"
+                        style={{ color: isDark ? '#e2e8f0' : '#334155' }}
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          logout();
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-red-500/10 hover:text-red-500 text-left"
+                        style={{ color: isDark ? '#e2e8f0' : '#334155' }}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

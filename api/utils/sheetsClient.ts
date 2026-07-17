@@ -48,17 +48,124 @@ function rowToActivity(row: string[]): any | null {
   };
 }
 
-async function fetchRawValues(token: string, spreadsheetId: string): Promise<string[][]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(RANGE)}`;
+async function fetchRawValues(token: string, spreadsheetId: string, customRange?: string): Promise<string[][]> {
+  const rangeToFetch = customRange || RANGE;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(rangeToFetch)}`;
   const data = await handleResponse(await fetch(url, { headers: { Authorization: `Bearer ${token}` } }));
   return data.values || [];
 }
 
+const verifiedSheets = new Set<string>();
+
+async function verifyAndProtectSheet(token: string, spreadsheetId: string) {
+  if (verifiedSheets.has(spreadsheetId)) return;
+  verifiedSheets.add(spreadsheetId);
+
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+    const info = await handleResponse(await fetch(url, { headers: makeHeaders(token) }));
+    
+    const sheet = info.sheets.find((s: any) => s.properties.title === SHEET_NAME);
+    if (!sheet) return;
+
+    const sheetId = sheet.properties.sheetId;
+    const requests: any[] = [];
+
+    // Check if column H is hidden
+    const colMetadata = sheet.data?.[0]?.columnMetadata;
+    const isHidden = colMetadata && colMetadata.length > 7 ? colMetadata[7]?.hiddenByUser : false;
+    
+    // Check if protected
+    const isProtected = sheet.protectedRanges?.some((pr: any) => 
+      pr.range.startColumnIndex === 7 && pr.range.endColumnIndex === 8
+    );
+
+    if (!isHidden) {
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: 7, endIndex: 8 },
+          properties: { hiddenByUser: true },
+          fields: 'hiddenByUser'
+        }
+      });
+    }
+
+    if (!isProtected) {
+      requests.push({
+        addProtectedRange: {
+          protectedRange: {
+            range: { sheetId, startColumnIndex: 7, endColumnIndex: 8 },
+            description: 'Internal System ID Column',
+            warningOnly: false,
+            editors: {} // Leaves it to owner only
+          }
+        }
+      });
+    }
+
+    if (requests.length > 0) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: makeHeaders(token),
+        body: JSON.stringify({ requests }),
+      });
+    }
+
+    // Ensure header is "Activity ID"
+    const headerVals = await fetchRawValues(token, spreadsheetId, `${SHEET_NAME}!H1`);
+    if (!headerVals[0] || headerVals[0][0] !== 'Activity ID') {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(SHEET_NAME + '!H1')}?valueInputOption=USER_ENTERED`, {
+        method: 'PUT',
+        headers: makeHeaders(token),
+        body: JSON.stringify({ values: [['Activity ID']] }),
+      });
+    }
+
+  } catch (error) {
+    console.error('Failed to verify and protect sheet:', error);
+    verifiedSheets.delete(spreadsheetId); // allow retry
+  }
+}
+
 export async function fetchAllActivities(token: string, spreadsheetId: string) {
+  // Run verification non-blocking to prevent slow initial load if possible, 
+  // but since we need it verified, we await it. It's cached in memory so it only hits once per lambda lifecycle.
+  await verifyAndProtectSheet(token, spreadsheetId);
+
   const values = await fetchRawValues(token, spreadsheetId);
   if (values.length <= 1) return [];
+  
+  let needsUpdate = false;
+  const updates: { range: string, values: string[][] }[] = [];
+  
   const rows = values.slice(1);
-  return rows.map(r => rowToActivity(r)).filter(a => a !== null);
+  const parsed = rows.map((r, i) => {
+    let id = r[7];
+    if (!id) {
+      id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      r[7] = id;
+      needsUpdate = true;
+      updates.push({
+        range: `${SHEET_NAME}!H${i + 2}`,
+        values: [[id]]
+      });
+    }
+    return rowToActivity(r);
+  }).filter(a => a !== null);
+
+  if (needsUpdate && updates.length > 0) {
+    // Fire and forget batch update for missing IDs to not block response
+    fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+      method: 'POST',
+      headers: makeHeaders(token),
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: updates
+      }),
+    }).catch(e => console.error('Failed to update missing IDs:', e));
+  }
+
+  return parsed;
 }
 
 export async function appendActivity(token: string, spreadsheetId: string, activity: any) {

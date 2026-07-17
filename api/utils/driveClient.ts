@@ -51,6 +51,7 @@ async function createSpreadsheet(accessToken: string): Promise<string> {
                     'Category',
                     'Activity',
                     'Created At',
+                    'Activity ID',
                   ].map(v => ({ userEnteredValue: { stringValue: v } })),
                 },
               ],

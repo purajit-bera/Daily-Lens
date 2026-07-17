@@ -4,10 +4,12 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LoadingProvider } from '@/context/LoadingContext';
 import { SettingsProvider, useSettings } from '@/context/SettingsContext';
+import { OverridesProvider, useOverrides } from '@/context/OverridesContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { ActivityEntry } from '@/pages/ActivityEntry';
 import { Statistics } from '@/pages/Statistics';
+import { SettingsPage } from '@/pages/Settings';
 
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 
@@ -16,6 +18,7 @@ const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 function ProtectedRoutes() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { isInitialized: isSettingsInitialized, isLoading: isSettingsLoading } = useSettings();
+  const { isInitialized: isOverridesInitialized, isLoading: isOverridesLoading } = useOverrides();
 
   if (isAuthLoading) {
     return null; // Global LoadingContext overlay covers the screen
@@ -30,6 +33,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<ActivityEntry />} />
         <Route path="/stats" element={<Statistics />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
@@ -63,9 +67,11 @@ export default function App() {
         <LoadingProvider>
           <AuthProvider>
             <SettingsProvider>
-              <BrowserRouter>
-                <ProtectedRoutes />
-              </BrowserRouter>
+              <OverridesProvider>
+                <BrowserRouter>
+                  <ProtectedRoutes />
+                </BrowserRouter>
+              </OverridesProvider>
             </SettingsProvider>
           </AuthProvider>
         </LoadingProvider>

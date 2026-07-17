@@ -1,15 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { TimeSyncState } from '@/types';
-import { currentTime, currentTimeMinus, calcDuration, calcEndTime, calcStartTime, todayDate } from '@/utils/timeUtils';
+import { currentTime, currentTimeMinus, calcDuration, calcEndTime, calcStartTime, todayDate, normalizeTimeFormat } from '@/utils/timeUtils';
 
-const DEFAULT_DURATION = 60;
-
-function getDefaultState(): TimeSyncState {
+function getDefaultState(defaultDuration: number): TimeSyncState {
   const end = currentTime();
   return {
-    startTime: calcStartTime(end, DEFAULT_DURATION),
+    startTime: calcStartTime(end, defaultDuration),
     endTime: end,
-    durationMinutes: DEFAULT_DURATION,
+    durationMinutes: defaultDuration,
   };
 }
 
@@ -24,12 +22,18 @@ export type TimeAnchor = 'start' | 'end';
  * - Change endTime  → duration = end - start (start stays fixed)
  * - Change startTime → duration = end - start (end stays fixed)
  */
-export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wakeUpTime: string = '00:00') {
-  const [state, setState] = useState<TimeSyncState & { isManualEndTime: boolean, timeAnchor: TimeAnchor }>(() => ({
-    ...getDefaultState(),
-    isManualEndTime: !!(initial && initial.endTime),
-    timeAnchor: 'end',
+export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wakeUpTime: string = '00:00', defaultDuration: number = 60) {
+  const normalizedInitial = initial ? {
     ...initial,
+    startTime: initial.startTime ? normalizeTimeFormat(initial.startTime) : undefined,
+    endTime: initial.endTime ? normalizeTimeFormat(initial.endTime) : undefined,
+  } : undefined;
+
+  const [state, setState] = useState<TimeSyncState & { isManualEndTime: boolean, timeAnchor: TimeAnchor }>(() => ({
+    ...getDefaultState(defaultDuration),
+    isManualEndTime: !!(normalizedInitial && normalizedInitial.endTime),
+    timeAnchor: 'end',
+    ...normalizedInitial,
   }));
 
   useEffect(() => {
@@ -48,6 +52,19 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wake
     
     return () => clearInterval(timer);
   }, [state.isManualEndTime, state.endTime, date, wakeUpTime]);
+
+  useEffect(() => {
+    setState(prev => {
+      if (!prev.isManualEndTime && prev.durationMinutes !== defaultDuration) {
+        return {
+          ...prev,
+          durationMinutes: defaultDuration,
+          startTime: calcStartTime(prev.endTime, defaultDuration),
+        };
+      }
+      return prev;
+    });
+  }, [defaultDuration]);
 
   const setStartTime = useCallback((startTime: string) => {
     setState(prev => {
@@ -93,8 +110,8 @@ export function useTimeSync(date: string, initial?: Partial<TimeSyncState>, wake
   }, []);
 
   const reset = useCallback(() => {
-    setState({ ...getDefaultState(), isManualEndTime: false, timeAnchor: 'end' });
-  }, []);
+    setState({ ...getDefaultState(defaultDuration), isManualEndTime: false, timeAnchor: 'end' });
+  }, [defaultDuration]);
 
   const setAll = useCallback((s: Partial<TimeSyncState>) => {
     setState(prev => ({ ...prev, ...s, isManualEndTime: true }));

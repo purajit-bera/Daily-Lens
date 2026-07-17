@@ -15,6 +15,8 @@ import type { Activity as ActivityType, FilterType, PieChartData, TrendDataPoint
 import { useActivities } from '@/hooks/useActivities';
 import { useInsights } from '@/hooks/useInsights';
 import { useSettings } from '@/context/SettingsContext';
+import { useOverrides } from '@/context/OverridesContext';
+import { useSleepSchedule } from '@/hooks/useSleepSchedule';
 import { ActivityFilter } from '@/components/activity/ActivityFilter';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 import { ActivityPieChart } from '@/components/charts/ActivityPieChart';
@@ -35,24 +37,34 @@ import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getD
 import { scoreLabel, scoreColor } from '@/utils/insights';
 
 export function Statistics() {
-  const { settings, updateSetting } = useSettings();
+  const { settings } = useSettings();
+  const { updateOverride, clearOverride, isLoading: isOverridesLoading } = useOverrides();
   const [selectedDate, setSelectedDate] = useState(() => todayDate(settings.wakeUpTime));
   const [filter, setFilter] = useState<FilterType>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const [wakeUpTime, setWakeUpTime] = useState(settings.wakeUpTime);
-  const [bedtime, setBedtime] = useState(settings.bedtime);
+  const schedule = useSleepSchedule(selectedDate);
+  const activeWakeUp = schedule.wakeUpTime;
+  const activeBedtime = schedule.bedtime;
+  const isOverridden = schedule.isOverridden;
 
-  // Sync local state when settings change from another source (or on mount)
+  const [wakeUpTime, setWakeUpTime] = useState(activeWakeUp);
+  const [bedtime, setBedtime] = useState(activeBedtime);
+
+  // Sync local state when selectedDate changes or overrides load
   useEffect(() => {
-    setWakeUpTime(settings.wakeUpTime);
-    setBedtime(settings.bedtime);
-  }, [settings.wakeUpTime, settings.bedtime]);
+    setWakeUpTime(activeWakeUp);
+    setBedtime(activeBedtime);
+  }, [activeWakeUp, activeBedtime]);
 
-  const handleSaveSchedule = () => {
-    updateSetting('wakeUpTime', wakeUpTime);
-    updateSetting('bedtime', bedtime);
+  const handleSaveSchedule = async () => {
+    await updateOverride(selectedDate, wakeUpTime, bedtime);
+    setShowScheduleModal(false);
+  };
+
+  const handleClearOverride = async () => {
+    await clearOverride(selectedDate);
     setShowScheduleModal(false);
   };
 
@@ -439,9 +451,9 @@ export function Statistics() {
                        <Clock className="w-5 h-5 text-brand-400" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-white">Sleep Schedule</h3>
+                      <h3 className="text-sm font-bold text-white">Sleep Schedule {isOverridden && <span className="ml-1 text-[10px] bg-brand-500/20 text-brand-300 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Override</span>}</h3>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Wake-up: <span className="font-medium text-slate-300">{formatTime12h(settings.wakeUpTime)}</span> &bull; Bedtime: <span className="font-medium text-slate-300">{formatTime12h(settings.bedtime)}</span>
+                        Wake-up: <span className="font-medium text-slate-300">{formatTime12h(activeWakeUp)}</span> &bull; Bedtime: <span className="font-medium text-slate-300">{formatTime12h(activeBedtime)}</span>
                       </p>
                     </div>
                   </div>
@@ -504,10 +516,10 @@ export function Statistics() {
         onClose={() => {
           setShowScheduleModal(false);
           // Revert local state if cancelled
-          setWakeUpTime(settings.wakeUpTime);
-          setBedtime(settings.bedtime);
+          setWakeUpTime(activeWakeUp);
+          setBedtime(activeBedtime);
         }}
-        title="Edit Schedule"
+        title={`Edit Schedule for ${formatDateShort(selectedDate)}`}
       >
         <div className="space-y-6">
           <div className="space-y-4">
@@ -534,23 +546,38 @@ export function Statistics() {
               />
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-            <button
-              onClick={() => {
-                setShowScheduleModal(false);
-                setWakeUpTime(settings.wakeUpTime);
-                setBedtime(settings.bedtime);
-              }}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveSchedule}
-              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 rounded-xl transition-all shadow-glow"
-            >
-              Save Schedule
-            </button>
+          <div className="flex justify-between items-center pt-4 border-t border-white/10 mt-6">
+            <div>
+              {isOverridden && (
+                <button
+                  onClick={handleClearOverride}
+                  disabled={isOverridesLoading}
+                  className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl transition-all"
+                >
+                  Clear Override
+                </button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setWakeUpTime(activeWakeUp);
+                  setBedtime(activeBedtime);
+                }}
+                disabled={isOverridesLoading}
+                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSchedule}
+                disabled={isOverridesLoading}
+                className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 rounded-xl transition-all shadow-glow disabled:opacity-50"
+              >
+                {isOverridesLoading ? 'Saving...' : 'Save Override'}
+              </button>
+            </div>
           </div>
         </div>
       </Modal>

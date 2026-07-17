@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   wakeUpTime: '06:00',
   bedtime: '23:00',
   theme: 'system',
+  showQuickTips: true,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

@@ -34,6 +34,12 @@ export function currentTimeMinus(minutes: number): string {
   return dayjs().subtract(minutes, 'minute').format('HH:mm');
 }
 
+/** Ensures time is in HH:mm format with leading zero for hour */
+export function normalizeTimeFormat(time: string): string {
+  if (!time) return '';
+  return dayjs(`2000-01-01 ${time}`, 'YYYY-MM-DD HH:mm').format('HH:mm');
+}
+
 /** Format HH:mm to 12h display (e.g. "3:30 PM") */
 export function formatTime12h(time: string): string {
   return dayjs(`2000-01-01 ${time}`, 'YYYY-MM-DD HH:mm').format('h:mm A');

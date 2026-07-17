@@ -8,6 +8,8 @@ import { todayDate, formatDate, compareTime, formatTime12h, calcEndTime, calcDur
 import { OverlapDialog } from '@/components/activity/OverlapDialog';
 import { useSettings } from '@/context/SettingsContext';
 
+import { QuickTips } from '@/components/tips/QuickTips';
+
 export function ActivityEntry() {
   const { settings } = useSettings();
   const [showSuccess, setShowSuccess] = useState(false);
@@ -93,14 +95,7 @@ export function ActivityEntry() {
           </div>
         </div>
 
-        {/* Quick tip */}
-        <div className="flex items-start gap-2 mt-4 px-4 py-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
-          <Sparkles className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-indigo-200">
-            <strong>Quick tip:</strong> End time is <em>now</em>, Start time is when the activity began.
-            <span className="hidden md:inline"> Press <kbd className="px-1 py-0.5 rounded bg-indigo-500/20 font-mono">Ctrl+Enter</kbd> to save instantly.</span>
-          </p>
-        </div>
+        <QuickTips />
 
         {/* Last Activity Context */}
         {lastActivity && (

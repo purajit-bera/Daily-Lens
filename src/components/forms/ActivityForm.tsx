@@ -4,9 +4,10 @@ import { Calendar, Clock, Timer, Save, Zap } from 'lucide-react';
 import type { Activity, ActivityCategory, ActivityFormData } from '@/types';
 import { useTimeSync } from '@/hooks/useTimeSync';
 import { useSettings } from '@/context/SettingsContext';
+import { useSleepSchedule } from '@/hooks/useSleepSchedule';
 import { RichTextEditor } from './RichTextEditor';
 import { Button, Card, ErrorAlert, cn } from '@/components/ui';
-import { todayDate, generateId, formatTime12h, currentTime, calcStartTime, calcEndTime, formatDurationLong, compareTime, calcDuration } from '@/utils/timeUtils';
+import { todayDate, generateId, formatTime12h, currentTime, calcStartTime, calcEndTime, formatDurationLong, compareTime, calcDuration, dayjs } from '@/utils/timeUtils';
 import { validateActivity } from '@/utils/validators';
 import { useActivities } from '@/hooks/useActivities';
 
@@ -60,32 +61,46 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
   });
 
   const date = watch('date');
+  const { wakeUpTime, previousBedtime } = useSleepSchedule(date || todayDate(settings.wakeUpTime));
+  
   const timeSync = useTimeSync(date, initialData ? {
     startTime: initialData.startTime,
     endTime: initialData.endTime,
     durationMinutes: initialData.durationMinutes,
-  } : undefined, settings.wakeUpTime);
+  } : undefined, wakeUpTime, settings.defaultDurationMinutes);
   const description = watch('description');
   const category = watch('category');
 
   const { activities } = useActivities({ date });
   const lastActivity = activities.length > 0 
-    ? [...activities].sort((a, b) => compareTime(b.startTime, a.startTime, settings.wakeUpTime))[0] 
+    ? [...activities].sort((a, b) => compareTime(b.startTime, a.startTime, wakeUpTime))[0] 
     : null;
 
   const handleContinue = useCallback(() => {
-    const isToday = date === todayDate(settings.wakeUpTime);
+    const isToday = date === todayDate(wakeUpTime);
     const newStart = lastActivity 
       ? calcEndTime(lastActivity.endTime, 1) 
-      : settings.wakeUpTime;
-    const newEnd = isToday ? currentTime() : timeSync.endTime;
+      : wakeUpTime;
+      
+    let targetDuration = settings.defaultDurationMinutes;
+    let newEnd = calcEndTime(newStart, targetDuration);
+    
+    // Future time restriction for today
+    if (isToday) {
+      const now = currentTime();
+      if (newEnd > now) {
+        newEnd = now;
+        targetDuration = calcDuration(newStart, newEnd, wakeUpTime);
+      }
+    }
     
     timeSync.setAll({
       startTime: newStart,
       endTime: newEnd,
-      durationMinutes: calcDuration(newStart, newEnd, settings.wakeUpTime)
+      durationMinutes: targetDuration
     });
-  }, [date, lastActivity, settings.wakeUpTime, timeSync]);
+    timeSync.setTimeAnchor('start');
+  }, [date, lastActivity, wakeUpTime, timeSync, settings.defaultDurationMinutes]);
 
   const [durationStr, setDurationStr] = useState(timeSync.durationMinutes.toString());
   useEffect(() => {
@@ -219,10 +234,15 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Date */}
         <Card className="p-4">
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            <Calendar className="w-3.5 h-3.5" />
-            Date
-          </label>
+          <div className="flex items-center justify-between mb-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <Calendar className="w-3.5 h-3.5" />
+              Date
+            </label>
+            <span className="text-sm font-medium text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-md">
+              {dayjs(date || todayDate(settings.wakeUpTime)).format('dddd')}
+            </span>
+          </div>
           <input
             id="activity-date"
             type="date"
@@ -238,6 +258,41 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
           {errors.date && (
             <p className="text-xs text-red-400 mt-1">{errors.date.message}</p>
           )}
+
+          <div className="mt-3 pt-3 border-t border-white/5">
+            <div className="bg-white/5 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">😴</span>
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sleep Duration</div>
+                  <div className="font-medium text-base leading-tight">
+                    {(() => {
+                      const [wH, wM] = wakeUpTime.split(':').map(Number);
+                      const [bH, bM] = previousBedtime.split(':').map(Number);
+                      let diff = (wH * 60 + wM) - (bH * 60 + bM);
+                      if (diff < 0) diff += 24 * 60;
+                      const h = Math.floor(diff / 60);
+                      const m = diff % 60;
+                      if (m === 0) return `${h}h`;
+                      if (h === 0) return `${m}m`;
+                      return `${h}h ${m}m`;
+                    })()}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col items-end gap-1 text-xs">
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Bed (Prev)</span>
+                  <span className="text-slate-300 font-medium">{formatTime12h(previousBedtime)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Wake</span>
+                  <span className="text-slate-300 font-medium">{formatTime12h(wakeUpTime)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </Card>
 
         {/* Time fields */}
@@ -261,7 +316,7 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
                 type="button"
                 onClick={() => {
                   timeSync.reset();
-                  setDurationStr('60');
+                  setDurationStr(settings.defaultDurationMinutes.toString());
                 }}
                 className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
               >
@@ -303,11 +358,11 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
               <input
                 id="start-time"
                 type="time"
-                max={date === todayDate(settings.wakeUpTime) ? currentTime() : undefined}
+                max={date === todayDate(wakeUpTime) ? currentTime() : undefined}
                 value={timeSync.startTime}
                 onChange={e => {
                   let val = e.target.value;
-                  if (date === todayDate(settings.wakeUpTime) && val > currentTime()) {
+                  if (date === todayDate(wakeUpTime) && val > currentTime()) {
                     val = currentTime();
                     timeSync.setAll({
                       startTime: val,
@@ -334,11 +389,11 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
               <input
                 id="end-time"
                 type="time"
-                max={date === todayDate(settings.wakeUpTime) ? currentTime() : undefined}
+                max={date === todayDate(wakeUpTime) ? currentTime() : undefined}
                 value={timeSync.endTime}
                 onChange={e => {
                   let val = e.target.value;
-                  if (date === todayDate(settings.wakeUpTime) && val > currentTime()) {
+                  if (date === todayDate(wakeUpTime) && val > currentTime()) {
                     val = currentTime();
                     timeSync.setAll({
                       endTime: val,
@@ -381,8 +436,8 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
                 onBlur={() => {
                   const parsed = parseInt(durationStr, 10);
                   if (isNaN(parsed) || parsed <= 0) {
-                    setDurationStr('60');
-                    timeSync.setDuration(60);
+                    setDurationStr(settings.defaultDurationMinutes.toString());
+                    timeSync.setDuration(settings.defaultDurationMinutes);
                   } else {
                     setDurationStr(parsed.toString());
                   }
