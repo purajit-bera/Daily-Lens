@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@/context/SettingsContext';
-import { Card, Button, ErrorAlert } from '@/components/ui';
-import { Settings as SettingsIcon, Clock, Timer, Moon, Sun, Save, ArrowLeft, Sparkles } from 'lucide-react';
+import { Card, Button, ErrorAlert, DurationPicker } from '@/components/ui';
+import { Settings as SettingsIcon, Clock, Timer, Moon, Sun, Save, ArrowLeft, Sparkles, Target } from 'lucide-react';
 import { isValidTimeFormat } from '@/utils/validators';
 
 export function SettingsPage() {
@@ -13,6 +13,8 @@ export function SettingsPage() {
     wakeUpTime: settings.wakeUpTime,
     bedtime: settings.bedtime,
     showQuickTips: settings.showQuickTips ?? true,
+    positiveGoalMinutes: settings.positiveGoalMinutes ?? 480,
+    neutralThresholdMinutes: settings.neutralThresholdMinutes ?? 600,
   });
   const navigate = useNavigate();
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -40,6 +42,26 @@ export function SettingsPage() {
       return;
     }
 
+    if (
+      typeof localSettings.positiveGoalMinutes !== 'number' ||
+      isNaN(localSettings.positiveGoalMinutes) ||
+      localSettings.positiveGoalMinutes < 1 ||
+      !Number.isInteger(localSettings.positiveGoalMinutes)
+    ) {
+      setValidationError('Daily Positive Goal must be a positive whole number.');
+      return;
+    }
+
+    if (
+      typeof localSettings.neutralThresholdMinutes !== 'number' ||
+      isNaN(localSettings.neutralThresholdMinutes) ||
+      localSettings.neutralThresholdMinutes < 1 ||
+      !Number.isInteger(localSettings.neutralThresholdMinutes)
+    ) {
+      setValidationError('Neutral Activity Threshold must be a positive whole number.');
+      return;
+    }
+
     if (!isValidTimeFormat(localSettings.wakeUpTime) || !isValidTimeFormat(localSettings.bedtime)) {
       setValidationError('Please enter valid times for Wake-up Time and Bedtime (HH:mm).');
       return;
@@ -63,6 +85,12 @@ export function SettingsPage() {
       }
       if (localSettings.showQuickTips !== settings.showQuickTips) {
         await updateSetting('showQuickTips', localSettings.showQuickTips);
+      }
+      if (localSettings.positiveGoalMinutes !== settings.positiveGoalMinutes) {
+        await updateSetting('positiveGoalMinutes', localSettings.positiveGoalMinutes);
+      }
+      if (localSettings.neutralThresholdMinutes !== settings.neutralThresholdMinutes) {
+        await updateSetting('neutralThresholdMinutes', localSettings.neutralThresholdMinutes);
       }
       
       setSaveSuccess(true);
@@ -171,6 +199,28 @@ export function SettingsPage() {
               className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30 dark:[color-scheme:dark]"
             />
           </div>
+        </div>
+      </Card>
+
+      {/* Scoring Goals */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <Target className="w-5 h-5 text-brand-400" />
+          Scoring Goals
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <DurationPicker
+            label="Daily Positive Goal"
+            description="Target amount of Positive activities required each day."
+            valueMinutes={localSettings.positiveGoalMinutes}
+            onChange={(val) => setLocalSettings(s => ({ ...s, positiveGoalMinutes: val }))}
+          />
+          <DurationPicker
+            label="Neutral Threshold"
+            description="Maximum Neutral time before penalties begin."
+            valueMinutes={localSettings.neutralThresholdMinutes}
+            onChange={(val) => setLocalSettings(s => ({ ...s, neutralThresholdMinutes: val }))}
+          />
         </div>
       </Card>
 

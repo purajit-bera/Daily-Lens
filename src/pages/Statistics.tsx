@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import {
   BarChart3,
   Clock,
@@ -7,7 +8,7 @@ import {
   MinusCircle,
   Activity,
   Search,
-  Lightbulb,
+  Sparkles,
   TrendingUp,
   CalendarDays,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import { ActivityPieChart } from '@/components/charts/ActivityPieChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CalendarHeatmap } from '@/components/charts/CalendarHeatmap';
 import { ActivityForm } from '@/components/forms/ActivityForm';
+import { OverlapDialog } from '@/components/activity/OverlapDialog';
 import {
   Card,
   StatCard,
@@ -33,7 +35,7 @@ import {
   cn,
   Skeleton,
 } from '@/components/ui';
-import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, getDayLabel, compareTime, calcDuration, currentTime, formatTime12h } from '@/utils/timeUtils';
+import { todayDate, formatDate, formatDuration, formatDateShort, lastNDays, compareTime, calcDuration, currentTime, formatTime12h, calcEndTime } from '@/utils/timeUtils';
 import { scoreLabel, scoreColor } from '@/utils/insights';
 import { useLoading } from '@/context/LoadingContext';
 
@@ -79,25 +81,107 @@ export function Statistics() {
     error,
     refetchByDate,
     refetchRecent,
+    saveActivity,
     updateActivity,
     deleteActivity,
     clearError,
   } = useActivities({ date: selectedDate });
 
-  const [editingActivity, setEditingActivity] = useState<ActivityType | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
+  // Mobile collapse state
+  const [showDetails, setShowDetails] = useState(() => {
+    return localStorage.getItem('dal_mobile_details_expanded') === 'true';
+  });
+  const [showInsights, setShowInsights] = useState(() => {
+    return localStorage.getItem('dal_mobile_insights_expanded') === 'true';
+  });
 
-  const handleEditSave = async (activity: ActivityType) => {
-    const success = await updateActivity(activity);
+  const toggleDetails = () => {
+    setShowDetails(s => {
+      const v = !s;
+      localStorage.setItem('dal_mobile_details_expanded', v.toString());
+      return v;
+    });
+  };
+
+  const toggleInsights = () => {
+    setShowInsights(s => {
+      const v = !s;
+      localStorage.setItem('dal_mobile_insights_expanded', v.toString());
+      return v;
+    });
+  };
+
+  const [editingActivity, setEditingActivity] = useState<ActivityType | null>(null);
+  const [addingGapActivity, setAddingGapActivity] = useState<Gap | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Overlap state
+  const [pendingActivity, setPendingActivity] = useState<ActivityType | null>(null);
+  const [conflictActivity, setConflictActivity] = useState<ActivityType | null>(null);
+  const [isPendingEdit, setIsPendingEdit] = useState(false);
+
+  const performSave = async (activity: ActivityType, isEdit: boolean) => {
+    const success = await (isEdit ? updateActivity(activity) : saveActivity(activity));
     if (success) {
-      setEditingActivity(null);
+      if (isEdit) {
+        setEditingActivity(null);
+      } else {
+        setAddingGapActivity(null);
+      }
+      setPendingActivity(null);
+      setConflictActivity(null);
+      setIsPendingEdit(false);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2500);
     }
     return success;
   };
 
-  const { insights, stats } = useInsights(activities, selectedDate);
+  const checkOverlapAndSave = async (activity: ActivityType, isEdit: boolean) => {
+    const overlap = activities.find(a => {
+      if (isEdit && a.id === activity.id) return false;
+      const aStart = compareTime(a.startTime, a.endTime, wakeUpTime) < 0 ? a.startTime : a.endTime;
+      const aEnd = compareTime(a.startTime, a.endTime, wakeUpTime) > 0 ? a.startTime : a.endTime;
+      return compareTime(activity.startTime, aEnd, wakeUpTime) < 0 && compareTime(activity.endTime, aStart, wakeUpTime) > 0;
+    });
+
+    if (overlap) {
+      setPendingActivity(activity);
+      setConflictActivity(overlap);
+      setIsPendingEdit(isEdit);
+      return false; // Prevent form from closing
+    }
+
+    return performSave(activity, isEdit);
+  };
+
+  const handleEditSave = async (activity: ActivityType) => checkOverlapAndSave(activity, true);
+  const handleAddSave = async (activity: ActivityType) => checkOverlapAndSave(activity, false);
+
+  const handleResolveAuto = () => {
+    if (!pendingActivity || !conflictActivity) return;
+    const aEnd = compareTime(conflictActivity.startTime, conflictActivity.endTime, wakeUpTime) > 0 
+      ? conflictActivity.startTime 
+      : conflictActivity.endTime;
+      
+    const adjustedStart = calcEndTime(aEnd, 1);
+    const adjustedEnd = pendingActivity.endTime;
+    const recalculatedDuration = calcDuration(adjustedStart, adjustedEnd, wakeUpTime);
+    
+    performSave({
+      ...pendingActivity,
+      startTime: adjustedStart,
+      endTime: adjustedEnd,
+      durationMinutes: recalculatedDuration,
+    }, isPendingEdit);
+  };
+
+  const handleResolveKeep = () => {
+    if (!pendingActivity) return;
+    performSave(pendingActivity, isPendingEdit);
+  };
+
+  const { insights, stats } = useInsights(activities, recentActivities, selectedDate);
 
   // Fetch on date change
   useEffect(() => {
@@ -241,7 +325,8 @@ export function Statistics() {
 
   // ── Productivity score ────────────────────────────────────
 
-  const scoreCol = scoreColor(stats.productivityScore);
+  const b = stats.scoreBreakdown;
+  const scoreCol = scoreColor(b.finalScore);
 
   return (
     <div className="space-y-8 animate-slide-up">
@@ -344,37 +429,129 @@ export function Statistics() {
             />
           </div>
 
-          {/* Productivity Score */}
+          {/* Productivity Score Breakdown */}
           <Card className="p-5">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Daily Productivity Score
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Score Column */}
+              <div className="flex-1 min-w-[200px]">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Daily Score
                 </p>
-                <p className="text-4xl font-black" style={{ color: scoreCol }}>
-                  {stats.productivityScore}
-                  <span className="text-lg font-medium text-slate-500 ml-1">/ 100</span>
-                </p>
-                <p className="text-sm mt-1" style={{ color: scoreCol }}>
-                  {scoreLabel(stats.productivityScore)}
-                </p>
-              </div>
-
-              {/* Score bar */}
-              <div className="flex-1 min-w-[160px]">
-                <div className="h-3 rounded-full bg-white/10 overflow-hidden">
+                <div className="flex items-baseline gap-2 mb-2">
+                  <p className="text-5xl font-black tracking-tight" style={{ color: scoreCol }}>
+                    {b.finalScore}
+                  </p>
+                  <span className="text-xl font-semibold text-slate-500">/ 100</span>
+                </div>
+                
+                {/* Score bar */}
+                <div className="h-3 rounded-full bg-white/10 overflow-hidden mb-6">
                   <div
                     className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${stats.productivityScore}%`,
-                      backgroundColor: scoreCol,
-                    }}
+                    style={{ width: `${b.finalScore}%`, backgroundColor: scoreCol }}
                   />
                 </div>
-                <div className="flex justify-between mt-1 text-xs text-slate-500">
-                  <span>0</span>
-                  <span>50</span>
-                  <span>100</span>
+
+                <div className={`space-y-4 md:block overflow-hidden transition-all duration-300 ${showDetails ? 'max-h-[1000px] opacity-100 mt-6' : 'max-h-0 opacity-0 md:max-h-[1000px] md:opacity-100 md:mt-0'}`}>
+                  <div className="bg-black/20 rounded-xl p-4 border border-white/5">
+                    <h3 className="text-base font-bold text-white mb-1">{b.feedbackTitle}</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed mb-4">
+                      {b.feedbackMessage}
+                    </p>
+                    
+                    {b.feedbackSuggestions.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">How to improve tomorrow</p>
+                        <ul className="space-y-2">
+                          {b.feedbackSuggestions.map((s, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                              <span className="text-brand-400 font-bold">•</span>
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Mobile Toggle */}
+                <button 
+                  onClick={toggleDetails}
+                  className="w-full mt-2 flex md:hidden items-center justify-center gap-1.5 py-2 text-xs font-semibold text-slate-400 hover:text-slate-300 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+                >
+                  {showDetails ? (
+                    <><ChevronUp className="w-3.5 h-3.5" /> Hide Details</>
+                  ) : (
+                    <><ChevronDown className="w-3.5 h-3.5" /> Show Details</>
+                  )}
+                </button>
+              </div>
+
+              {/* Breakdown Column */}
+              <div className={`flex-1 min-w-[250px] space-y-4 md:block overflow-hidden transition-all duration-300 ${showDetails ? 'max-h-[1000px] opacity-100 mt-4' : 'max-h-0 opacity-0 md:max-h-[1000px] md:opacity-100 md:mt-0'}`}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Score Breakdown
+                </p>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Maximum Possible Today</span>
+                    <span className="font-bold text-white">{b.maxPossibleScore}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Positive Goal</span>
+                    <div className="text-right">
+                      <span className="font-medium text-white">{formatDuration(b.positiveMinutes)} / {formatDuration(b.positiveGoalMinutes)}</span>
+                      <span className="text-slate-500 ml-1">({b.completionPct}%)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Neutral Time</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-white">{formatDuration(b.neutralMinutes)}</span>
+                      {b.neutralPenalty > 0 ? (
+                         <span className="text-[10px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded uppercase font-semibold">Over Limit</span>
+                      ) : (
+                         <span className="text-[10px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded uppercase font-semibold">Within Limit</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Negative Time</span>
+                    <span className="font-medium text-white">{formatDuration(b.negativeMinutes)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 mt-4">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                    Reason for Lost Points
+                  </p>
+                  <ul className="space-y-2 text-sm text-slate-300">
+                    {b.negativePenalty > 0 && (
+                      <li className="flex justify-between items-center">
+                        <span className="text-red-400">-{b.negativePenalty} Maximum Score (Negative Activities)</span>
+                      </li>
+                    )}
+                    {b.neutralPenalty > 0 && (
+                      <li className="flex justify-between items-center">
+                        <span className="text-orange-400">-{b.neutralPenalty} Maximum Score (Excess Neutral Time)</span>
+                      </li>
+                    )}
+                    {b.completionPct < 100 && (
+                      <li className="flex justify-between items-center">
+                        <span className="text-slate-300">{b.completionPct}% Positive Goal Completed</span>
+                      </li>
+                    )}
+                    {b.maxPossibleScore === 100 && b.completionPct === 100 && (
+                      <li className="flex justify-between items-center">
+                        <span className="text-green-400">Perfect Score! No points lost.</span>
+                      </li>
+                    )}
+                  </ul>
                 </div>
               </div>
             </div>
@@ -389,26 +566,46 @@ export function Statistics() {
               <ActivityPieChart data={pieData} totalMinutes={stats.totalMinutes} />
             </Card>
 
-            {/* Insights */}
+            {/* Smart Insights */}
             <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Lightbulb className="w-4 h-4 text-yellow-400" />
-                <h2 className="text-sm font-semibold text-slate-300">Daily Insights</h2>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <h2 className="text-sm font-semibold text-slate-300">🧠 Smart Insights</h2>
+                </div>
+                <div className="md:hidden">
+                  <span className="text-xs text-slate-500 font-medium">{insights.length} Insights Available</span>
+                </div>
               </div>
-              {insights.length > 0 ? (
-                <ul className="space-y-3">
-                  {insights.map((insight, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-400 mt-1.5 flex-shrink-0" />
-                      <p className="text-sm text-slate-300 leading-relaxed">{insight}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  Log some activities for this date to see insights.
-                </p>
-              )}
+              
+              <div className={`md:block overflow-hidden transition-all duration-300 ${showInsights ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0 md:max-h-[1000px] md:opacity-100 md:mt-0'}`}>
+                {insights.length > 0 ? (
+                  <ul className="space-y-3">
+                    {insights.map((insight, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1.5 flex-shrink-0" />
+                        <p className="text-sm text-slate-300 leading-relaxed">{insight}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Log some activities for this date to see behavioral insights.
+                  </p>
+                )}
+              </div>
+              
+              {/* Mobile Toggle */}
+              <button 
+                onClick={toggleInsights}
+                className="w-full mt-4 flex md:hidden items-center justify-center gap-1.5 py-2 text-xs font-semibold text-slate-400 hover:text-slate-300 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+              >
+                {showInsights ? (
+                  <><ChevronUp className="w-3.5 h-3.5" /> Hide Insights</>
+                ) : (
+                  <><ChevronDown className="w-3.5 h-3.5" /> Show Insights</>
+                )}
+              </button>
             </Card>
           </div>
 
@@ -494,6 +691,7 @@ export function Statistics() {
               }
               onEdit={setEditingActivity}
               onDelete={deleteActivity}
+              onAddGapActivity={setAddingGapActivity}
             />
           </div>
 
@@ -517,8 +715,29 @@ export function Statistics() {
       >
         {editingActivity && (
           <ActivityForm
+            context="statistics"
             initialData={editingActivity}
             onSave={handleEditSave}
+            isSaving={isSaving}
+          />
+        )}
+      </Modal>
+
+      {/* Add Gap Modal */}
+      <Modal
+        isOpen={!!addingGapActivity}
+        onClose={() => setAddingGapActivity(null)}
+        title="Add Activity"
+      >
+        {addingGapActivity && (
+          <ActivityForm
+            context="statistics"
+            initialGap={{
+              startTime: addingGapActivity.startTime,
+              endTime: addingGapActivity.endTime,
+              durationMinutes: addingGapActivity.durationMinutes
+            }}
+            onSave={handleAddSave}
             isSaving={isSaving}
           />
         )}
@@ -596,8 +815,20 @@ export function Statistics() {
         </div>
       </Modal>
 
-      {/* Success Toast */}
       <SuccessAnimation show={showSuccess} message="Activity updated successfully!" />
+
+      {/* Overlap Dialog */}
+      <OverlapDialog
+        isOpen={!!pendingActivity}
+        conflictingActivity={conflictActivity}
+        proposedActivity={pendingActivity}
+        onResolveAuto={handleResolveAuto}
+        onResolveKeep={handleResolveKeep}
+        onCancel={() => {
+          setPendingActivity(null);
+          setConflictActivity(null);
+        }}
+      />
     </div>
   );
 }

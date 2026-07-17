@@ -362,5 +362,9 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-pulse bg-white/10 rounded-xl ${className}`} />;
+  return (
+    <div className={cn('animate-pulse rounded-xl bg-white/5', className)} />
+  );
 }
+
+export { DurationPicker } from './DurationPicker';

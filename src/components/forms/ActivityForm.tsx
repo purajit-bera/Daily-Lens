@@ -19,6 +19,8 @@ interface ActivityFormProps {
   onSave: (activity: Activity) => Promise<boolean>;
   isSaving: boolean;
   initialData?: Activity;
+  initialGap?: { startTime: string; endTime: string; durationMinutes: number };
+  context?: 'log' | 'statistics';
 }
 
 const CATEGORIES: { value: ActivityCategory; label: string; emoji: string; color: string }[] = [
@@ -33,7 +35,7 @@ const ACTIVE_CATEGORY_CLASSES: Record<ActivityCategory, string> = {
   Negative: 'bg-red-500 text-white shadow-[0_4px_12px_rgba(239,68,68,0.25)]',
 };
 
-export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProps) {
+export function ActivityForm({ onSave, isSaving, initialData, initialGap, context = 'log' }: ActivityFormProps) {
   const { settings } = useSettings();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recentActivities, setRecentActivities] = useState<string[]>([]);
@@ -63,11 +65,13 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
   const date = watch('date');
   const { wakeUpTime, previousBedtime } = useSleepSchedule(date || todayDate(settings.wakeUpTime));
   
-  const timeSync = useTimeSync(date, initialData ? {
-    startTime: initialData.startTime,
-    endTime: initialData.endTime,
-    durationMinutes: initialData.durationMinutes,
-  } : undefined, wakeUpTime, settings.defaultDurationMinutes);
+  const timeSyncInitial = initialData 
+    ? { startTime: initialData.startTime, endTime: initialData.endTime, durationMinutes: initialData.durationMinutes }
+    : initialGap 
+      ? initialGap 
+      : undefined;
+
+  const timeSync = useTimeSync(date, timeSyncInitial, wakeUpTime, settings.defaultDurationMinutes);
   const description = watch('description');
   const category = watch('category');
 
@@ -259,40 +263,42 @@ export function ActivityForm({ onSave, isSaving, initialData }: ActivityFormProp
             <p className="text-xs text-red-400 mt-1">{errors.date.message}</p>
           )}
 
-          <div className="mt-3 pt-3 border-t border-white/5">
-            <div className="bg-white/5 rounded-lg p-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">😴</span>
-                <div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sleep Duration</div>
-                  <div className="font-medium text-base leading-tight">
-                    {(() => {
-                      const [wH, wM] = wakeUpTime.split(':').map(Number);
-                      const [bH, bM] = previousBedtime.split(':').map(Number);
-                      let diff = (wH * 60 + wM) - (bH * 60 + bM);
-                      if (diff < 0) diff += 24 * 60;
-                      const h = Math.floor(diff / 60);
-                      const m = diff % 60;
-                      if (m === 0) return `${h}h`;
-                      if (h === 0) return `${m}m`;
-                      return `${h}h ${m}m`;
-                    })()}
+          {context === 'log' && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="bg-white/5 rounded-lg p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">😴</span>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sleep Duration</div>
+                    <div className="font-medium text-base leading-tight">
+                      {(() => {
+                        const [wH, wM] = wakeUpTime.split(':').map(Number);
+                        const [bH, bM] = previousBedtime.split(':').map(Number);
+                        let diff = (wH * 60 + wM) - (bH * 60 + bM);
+                        if (diff < 0) diff += 24 * 60;
+                        const h = Math.floor(diff / 60);
+                        const m = diff % 60;
+                        if (m === 0) return `${h}h`;
+                        if (h === 0) return `${m}m`;
+                        return `${h}h ${m}m`;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col items-end gap-1 text-xs">
+                  <div>
+                    <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Bed (Prev)</span>
+                    <span className="text-slate-300 font-medium">{formatTime12h(previousBedtime)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Wake</span>
+                    <span className="text-slate-300 font-medium">{formatTime12h(wakeUpTime)}</span>
                   </div>
                 </div>
               </div>
-              
-              <div className="flex flex-col items-end gap-1 text-xs">
-                <div>
-                  <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Bed (Prev)</span>
-                  <span className="text-slate-300 font-medium">{formatTime12h(previousBedtime)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase tracking-wider text-[9px] mr-1">Wake</span>
-                  <span className="text-slate-300 font-medium">{formatTime12h(wakeUpTime)}</span>
-                </div>
-              </div>
             </div>
-          </div>
+          )}
         </Card>
 
         {/* Time fields */}

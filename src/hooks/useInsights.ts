@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import type { Activity } from '@/types';
-import { generateInsights, calcProductivityScore } from '@/utils/insights';
+import { generateSmartInsights, calculateDailyScore, type ScoreBreakdown } from '@/utils/insights';
+import { useSettings } from '@/context/SettingsContext';
 
-export function useInsights(activities: Activity[], date: string) {
+export function useInsights(activities: Activity[], recentActivities: Activity[], date: string) {
+  const { settings } = useSettings();
   const insights = useMemo(
-    () => generateInsights(activities, date),
-    [activities, date]
+    () => generateSmartInsights(activities, recentActivities, date),
+    [activities, recentActivities, date]
   );
 
   const stats = useMemo(() => {
@@ -23,10 +25,12 @@ export function useInsights(activities: Activity[], date: string) {
     const safePercent = (n: number) =>
       totalMinutes > 0 ? Math.round((n / totalMinutes) * 100) : 0;
 
-    const productivityScore = calcProductivityScore(
+    const scoreBreakdown = calculateDailyScore(
       positiveMinutes,
       negativeMinutes,
-      neutralMinutes
+      neutralMinutes,
+      settings.positiveGoalMinutes ?? 480,
+      settings.neutralThresholdMinutes ?? 600
     );
 
     return {
@@ -38,9 +42,9 @@ export function useInsights(activities: Activity[], date: string) {
       positivePercent: safePercent(positiveMinutes),
       negativePercent: safePercent(negativeMinutes),
       neutralPercent: safePercent(neutralMinutes),
-      productivityScore,
+      scoreBreakdown,
     };
-  }, [activities]);
+  }, [activities, settings.positiveGoalMinutes, settings.neutralThresholdMinutes]);
 
   return { insights, stats };
 }
