@@ -31,6 +31,9 @@ export async function fetchSettings(): Promise<Settings> {
         const numValue = Number(value);
         if (!isNaN(numValue) && typeof DEFAULT_SETTINGS[key as keyof Settings] === 'number') {
           settingsObj[key] = numValue;
+        } else if (typeof DEFAULT_SETTINGS[key as keyof Settings] === 'boolean') {
+          // Parse boolean strictly
+          settingsObj[key] = String(value).toLowerCase() === 'true';
         } else {
           let finalValue = value;
           if (typeof value === 'string' && value.trim() !== '') {
