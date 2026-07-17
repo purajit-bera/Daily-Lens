@@ -129,7 +129,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     scope: GOOGLE_SCOPES,
     flow: 'auth-code',
-    prompt: 'consent',
   });
 
   const login = useCallback(() => {
